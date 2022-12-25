@@ -90,6 +90,161 @@ class ResponseFindLandRouts {
     }
 }
 
+class RESTCountriesAPIProvider {
+    URL = 'https://restcountries.com/v3.1';
+    requestsCount = 0;
+    cash = new Map();
+    fullTextQueryParam = 'fullText=true';
+
+    constructor(...fields) {
+        this.fieldsQueryParams = RESTCountriesAPIProvider.getFieldsQueryParams(fields);
+    }
+
+    // Для формирования query строки с полями ответа
+    static getFieldsQueryParams(fields) {
+        const set = new Set(fields);
+        set.add('cca3');
+        set.add('name');
+        set.add('borders');
+        set.add('latlng');
+        return [...fields].map(RESTCountriesAPIProvider.getFieldQueryParam).join('&');
+    }
+
+    // Для формирования query строки с полями ответа
+    static getFieldQueryParam(field) {
+        if (!Country.isValidCountryField(field)) {
+            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        return `fields=${field}`;
+    }
+
+    // Получения страны от API по коду cca3
+    async getCountryByCode(code) {
+        if (typeof code !== 'string') {
+            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+
+        // Проверяем есть ли в кеше страна
+        if (this.cash.has(code)) {
+            return this.cash.get(code);
+        }
+
+        this.requestsCount += 1; // увеличиваем счетчик запросов
+        const { URL, fieldsQueryParams } = this;
+        const result = await getData(`${URL}/alpha/${code}${getQueryString(fieldsQueryParams)}`);
+
+        // Если в ответе придет массив стран добавляем все станы в кеш и возвращаем искомую
+        if (Array.isArray(result)) {
+            result.forEach((country) => this.cash.set(country.cca3, country));
+            return result.find((country) => country.cca3 === code);
+        }
+
+        this.cash.set(result.cca3, result); // добавляем страну в кеш
+        return result;
+    }
+
+    // Получения стран от API по массиву кодов cca3
+    async getCountriesByCodes(codes) {
+        if (!Array.isArray(codes)) {
+            throw new Error('Недопустимые значения аргументов.');
+        }
+
+        return Promise.all(codes.map(this.getCountryByCode.bind(this)));
+    }
+
+    // Получение страны от API по имени
+    async getCountryByName(name) {
+        this.requestsCount += 1;
+        const { URL, fieldsQueryParams, fullTextQueryParam } = this;
+        const country = await getData(`${URL}/name/${name}${getQueryString(fieldsQueryParams, fullTextQueryParam)}`);
+        this.cash.set(country.cca3, country);
+        return country;
+    }
+
+    // Функция расчета сухопутного маршрута
+    async findLandRouts(
+        from,
+        to,
+        depth = 10,
+        result = new ResponseFindLandRouts(this.requestsCount),
+        currentRout = []
+    ) {
+        // Проверка аргументов
+        if (typeof depth !== 'number' || Number.isNaN(depth)) {
+            throw new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        if (!(result instanceof ResponseFindLandRouts)) {
+            throw new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        if (!Array.isArray(currentRout)) {
+            throw new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        if (!Country.isCountry(from) || !Country.isCountry(to)) {
+            throw new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+
+        // Проверка наличия сухопутных границ у заданных стран
+        if (!Country.hasBorders(from)) {
+            throw new BaseError(
+                2000,
+                'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
+            );
+        }
+        if (!Country.hasBorders(to)) {
+            throw new BaseError(
+                2000,
+                'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
+            );
+        }
+
+        // Проверка глубины поиска
+        if (depth < 0) {
+            return result;
+        }
+
+        // Если узел не посещен то отметить его как посещенный
+        if (!result.visited.get(from.cca3)) {
+            result.visited.set(from.cca3, true);
+        }
+
+        // Если узел граничит с местом назначения вернуть результат поиска
+        if (Country.hasBorder(from, to.cca3)) {
+            result.isFound = true;
+            result.routs.push([...currentRout, from.name.common, to.name.common]);
+            return result;
+        }
+
+        // Если маршрут уже найден в другом промисе прекратить поиск
+        if (result.isFound) {
+            return result;
+        }
+
+        // Отфильтровать посещенные узлы
+        const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
+        const countries = await this.getCountriesByCodes(filteredBorders);
+        result.requestsCount = this.requestsCount;
+
+        if (countries.length === 0) {
+            return Promise.reject('Нет стран для продолжения поиска.');
+        }
+
+        // Отсортировать полученные от API страны по степени удаления от места назначения
+        const sortedCountries = countries
+            .map((country) => ({
+                country,
+                dist: calcGreatCircleDistance(...country.latlng, ...to.latlng),
+            }))
+            .sort((a, b) => a.dist - b.dist);
+
+        // Если маршрут не найден рекурсивно вызвать функцию для отсортированного массива стран
+        return Promise.any(
+            sortedCountries.map((sortedCountry) =>
+                this.findLandRouts(sortedCountry.country, to, depth - 1, result, [...currentRout, from.name.common])
+            )
+        );
+    }
+}
+
 async function getData(url) {
     // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
     const response = await fetch(url, {
