@@ -5,6 +5,80 @@ class BaseError extends Error {
     }
 }
 
+// Вспомогательный класс для проверок данных от API
+class Country {
+    static VALID_FIELDS = [
+        'name',
+        'tld',
+        'cca2',
+        'ccn3',
+        'cca3',
+        'cioc',
+        'independent',
+        'status',
+        'unMember',
+        'currencies',
+        'idd',
+        'capital',
+        'altSpellings',
+        'region',
+        'subregion',
+        'languages',
+        'translations',
+        'latlng',
+        'landlocked',
+        'borders',
+        'area',
+        'demonyms',
+        'flag',
+        'maps',
+        'population',
+        'gini',
+        'fifa',
+        'car',
+        'timezones',
+        'continents',
+        'flags',
+        'coatOfArms',
+        'startOfWeek',
+        'capitalInfo',
+        'postalCode',
+    ];
+
+    // Возвращает true если страна имеет в поле borders непустой массив
+    static hasBorders(country) {
+        if (!Country.isCountry(country)) {
+            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        return country?.borders && country.borders.length !== 0;
+    }
+
+    // Проверяет имеет ли страна в поле borders код страны в формате cca3
+    static hasBorder(country, border) {
+        if (!Country.isCountry(country)) {
+            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        if (typeof border !== 'string') {
+            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        return country.borders.includes(border);
+    }
+
+    static isValidCountryField(field) {
+        if (typeof field !== 'string') {
+            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        }
+        return this.VALID_FIELDS.includes(field);
+    }
+
+    static isCountry(country) {
+        if (!country?.cca3 || !country?.latlng || !country?.name) {
+            return false;
+        }
+        return Object.keys(country).every((field) => Country.isValidCountryField(field));
+    }
+}
+
 async function getData(url) {
     // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
     const response = await fetch(url, {
