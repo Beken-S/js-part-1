@@ -122,6 +122,11 @@ async function loadCountriesData() {
     }, {});
 }
 
+// Функция для создания query строки
+function getQueryString(...params) {
+    return `?${params.join('&')}`;
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
