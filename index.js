@@ -79,6 +79,17 @@ class Country {
     }
 }
 
+// Вспомогательный класс для оформления ответа от функции поиска маршрута
+class ResponseFindLandRouts {
+    isFound = false;
+    visited = new Map();
+    routs = [];
+
+    constructor(requestsCount = 0) {
+        this.requestsCount = requestsCount;
+    }
+}
+
 async function getData(url) {
     // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
     const response = await fetch(url, {
