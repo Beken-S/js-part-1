@@ -225,6 +225,12 @@ function printInElement(string, output) {
     }
 }
 
+function toggleUIDisable(...elements) {
+    if (elements.every((element) => element instanceof HTMLElement)) {
+        elements.forEach((element) => (element.disabled = !element.disabled));
+    }
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
