@@ -169,6 +169,32 @@ function calcGreatCircleDistance(lat1, long1, lat2, long2) {
     return Math.round(ad * EARTH_RADIUS);
 }
 
+function getRequestString(num) {
+    if (typeof num !== 'number' || !Number.isFinite(num)) {
+        throw new BaseError(1001, 'Недопустимые значения аргументов.');
+    }
+
+    let key = num;
+
+    if (key > 100) {
+        key %= 100;
+    }
+    if (key > 19) {
+        key %= 10;
+    }
+
+    switch (key) {
+        case 1:
+            return `Потребовалось выполнить ${num} запрос.`;
+        case 2:
+        case 3:
+        case 4:
+            return `Потребовалось выполнить ${num} запроса.`;
+        default:
+            return `Потребовалось выполнить ${num} запросов.`;
+    }
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
