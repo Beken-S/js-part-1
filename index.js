@@ -219,6 +219,12 @@ function getSearchMarkup(from, to) {
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
 }
 
+function printInElement(string, output) {
+    if (output instanceof HTMLElement) {
+        output.innerHTML = string;
+    }
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
