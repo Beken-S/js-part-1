@@ -231,6 +231,27 @@ function toggleUIDisable(...elements) {
     }
 }
 
+function errorHandler(err, output) {
+    if (err instanceof BaseError && output instanceof HTMLElement) {
+        switch (err.status) {
+            case 400:
+            case 404:
+            case 1000:
+            case 2000:
+            case 2001:
+                printInElement(err.message, output);
+                break;
+            default:
+                printInElement('Что-то пошло не так. Попробуйте повторит запрос позже', output);
+                console.error(err);
+                break;
+        }
+    } else {
+        printInElement('Что-то пошло не так. Попробуйте повторить запрос позже.', output);
+        console.error(err);
+    }
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
