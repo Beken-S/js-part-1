@@ -436,10 +436,33 @@ const output = document.getElementById('output');
     toCountry.disabled = false;
     submit.disabled = false;
 
-    form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
-        // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
-        // TODO: Вывести маршрут и общее количество запросов.
+    form.addEventListener('submit', async (event) => {
+        try {
+            event.preventDefault();
+            toggleUIDisable(fromCountry, toCountry, submit);
+
+            if (fromCountry.value === '' || toCountry.value === '') {
+                throw new BaseError(2001, 'Оба поля должны быть заполнены.');
+            }
+
+            // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
+            printInElement(getSearchMarkup(fromCountry.value, toCountry.value), output);
+
+            // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
+            const API = new RESTCountriesAPIProvider();
+            const [from, to] = await Promise.all([
+                API.getCountryByName(fromCountry.value),
+                API.getCountryByName(toCountry.value),
+            ]).then((result) => result.flat());
+            const result = await API.findLandRouts(from, to);
+
+            toggleUIDisable(fromCountry, toCountry, submit);
+
+            // TODO: Вывести маршрут и общее количество запросов.
+            printInElement(getRoutsMarkup(result), output);
+        } catch (err) {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            errorHandler(err, output);
+        }
     });
 })();
