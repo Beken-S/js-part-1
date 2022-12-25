@@ -195,6 +195,22 @@ function getRequestString(num) {
     }
 }
 
+function getRoutsMarkup({ isFound, requestsCount, routs }) {
+    if (isFound == null || requestsCount == null || routs == null) {
+        return '';
+    }
+    if (isFound) {
+        return `${routs.reduce((str, rout) => {
+            str += `${rout.join(' &#129046; ')}<br />`;
+            return str;
+        }, '')}
+        <br />
+        ${getRequestString(requestsCount)}
+        `;
+    }
+    return `Не удалось рассчитать маршрут.<br /><br />${getRequestString(requestsCount)}`;
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
