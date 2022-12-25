@@ -99,6 +99,18 @@ async function getData(url) {
         },
         redirect: 'follow',
     });
+
+    if (!response.ok) {
+        if (response.status === 400) {
+            throw new BaseError(400, 'Некорректный запрос. Пожалуйста проверьте введенные данные.');
+        }
+        if (response.status === 404) {
+            throw new BaseError(404, 'Информация не найдена. Пожалуйста проверьте введенные данные.');
+        } else {
+            throw new BaseError(1000, 'Что-то пошло не так. Попробуйте повторить запрос позже.');
+        }
+    }
+
     return response.json();
 }
 
