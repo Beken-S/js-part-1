@@ -211,6 +211,14 @@ function getRoutsMarkup({ isFound, requestsCount, routs }) {
     return `Не удалось рассчитать маршрут.<br /><br />${getRequestString(requestsCount)}`;
 }
 
+function getSearchMarkup(from, to) {
+    if (typeof from !== 'string' || typeof to !== 'string') {
+        throw new BaseError(1001, 'Недопустимые значения аргументов.');
+    }
+
+    return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
+}
+
 const form = document.getElementById('form');
 const fromCountry = document.getElementById('fromCountry');
 const toCountry = document.getElementById('toCountry');
