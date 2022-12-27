@@ -202,10 +202,13 @@ class RESTCountriesAPIProvider {
             return result;
         }
 
-        // Если узел не посещен то отметить его как посещенный
-        if (!result.visited.get(from.cca3)) {
-            result.visited.set(from.cca3, true);
+        // Если узел уже посещен вернуть reject
+        if (result.visited.get(from.cca3)) {
+            return Promise.reject('Узел уже посещен.');
         }
+
+        // Отметить узел как посещенный
+        result.visited.set(from.cca3, true);
 
         // Если узел граничит с местом назначения вернуть результат поиска
         if (Country.hasBorder(from, to.cca3)) {
