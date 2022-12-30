@@ -107,7 +107,8 @@ class RESTCountriesAPIProvider {
         set.add('name');
         set.add('borders');
         set.add('latlng');
-        return [...fields].map(RESTCountriesAPIProvider.getFieldQueryParam).join('&');
+        set.add('translations');
+        return [...set].map(RESTCountriesAPIProvider.getFieldQueryParam).join('&');
     }
 
     // Для формирования query строки с полями ответа
@@ -118,9 +119,34 @@ class RESTCountriesAPIProvider {
         return `fields=${field}`;
     }
 
+    async getCountryAll() {
+        this.requestsCount += 1;
+        const { URL, fieldsQueryParams } = this;
+        const result = await getData(`${URL}/all${getQueryString(fieldsQueryParams)}`);
+
+        result
+            .sort((a, b) => {
+                const nameA = a.translations.rus.common;
+                const nameB = b.translations.rus.common;
+
+                if (nameA < nameB) {
+                    return -1;
+                }
+                if (nameA > nameB) {
+                    return 1;
+                }
+                return 0;
+            })
+            .forEach((country) => {
+                this.cash.set(country.cca3, country);
+            });
+
+        return result;
+    }
+
     // Получения страны от API по коду cca3
     async getCountryByCode(code) {
-        if (typeof code !== 'string') {
+        if (typeof code !== 'string' || code === '') {
             return new BaseError(1001, 'Недопустимые значения аргументов.');
         }
 
@@ -150,15 +176,6 @@ class RESTCountriesAPIProvider {
         }
 
         return Promise.all(codes.map(this.getCountryByCode.bind(this)));
-    }
-
-    // Получение страны от API по имени
-    async getCountryByName(name) {
-        this.requestsCount += 1;
-        const { URL, fieldsQueryParams, fullTextQueryParam } = this;
-        const country = await getData(`${URL}/name/${name}${getQueryString(fieldsQueryParams, fullTextQueryParam)}`);
-        this.cash.set(country.cca3, country);
-        return country;
     }
 
     // Функция расчета сухопутного маршрута
@@ -213,7 +230,7 @@ class RESTCountriesAPIProvider {
         // Если узел граничит с местом назначения вернуть результат поиска
         if (Country.hasBorder(from, to.cca3)) {
             result.isFound = true;
-            result.routs.push([...currentRout, from.name.common, to.name.common]);
+            result.routs.push([...currentRout, from.translations.rus.common, to.translations.rus.common]);
             return result;
         }
 
@@ -242,7 +259,10 @@ class RESTCountriesAPIProvider {
         // Если маршрут не найден рекурсивно вызвать функцию для отсортированного массива стран
         return Promise.any(
             sortedCountries.map((sortedCountry) =>
-                this.findLandRouts(sortedCountry.country, to, depth - 1, result, [...currentRout, from.name.common])
+                this.findLandRouts(sortedCountry.country, to, depth - 1, result, [
+                    ...currentRout,
+                    from.translations.rus.common,
+                ])
             )
         );
     }
@@ -270,14 +290,6 @@ async function getData(url) {
     }
 
     return response.json();
-}
-
-async function loadCountriesData() {
-    const countries = await getData('https://restcountries.com/v3.1/all?fields=name&fields=cca3&fields=area');
-    return countries.reduce((result, country) => {
-        result[country.cca3] = country;
-        return result;
-    }, {});
 }
 
 // Функция для создания query строки
@@ -369,12 +381,35 @@ function getRoutsMarkup({ isFound, requestsCount, routs }) {
     return `Не удалось рассчитать маршрут.<br /><br />${getRequestString(requestsCount)}`;
 }
 
+function getLoadingMarkup() {
+    return 'Идет загрузка...';
+}
+
 function getSearchMarkup(from, to) {
     if (typeof from !== 'string' || typeof to !== 'string') {
         throw new BaseError(1001, 'Недопустимые значения аргументов.');
     }
 
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
+}
+
+function fillDatalist(datalist, countriesData) {
+    if (datalist instanceof HTMLElement) {
+        const optionsList = document.createDocumentFragment();
+        const countriesNameMap = new Map();
+
+        countriesData.forEach((country) => {
+            const option = document.createElement('option');
+            option.value = country?.translations.rus.common;
+            optionsList.appendChild(option);
+            countriesNameMap.set(country?.translations.rus.common, country?.cca3);
+        });
+
+        datalist.appendChild(optionsList);
+
+        return countriesNameMap;
+    }
+    return null;
 }
 
 function printInElement(string, output) {
@@ -418,54 +453,57 @@ const submit = document.getElementById('submit');
 const output = document.getElementById('output');
 
 (async () => {
-    fromCountry.disabled = true;
-    toCountry.disabled = true;
-    submit.disabled = true;
+    try {
+        toggleUIDisable(fromCountry, toCountry, submit);
+        printInElement(getLoadingMarkup(), output);
 
-    output.textContent = 'Loading…';
-    const countriesData = await loadCountriesData();
-    output.textContent = '';
+        const API = new RESTCountriesAPIProvider();
 
-    // Заполняем список стран для подсказки в инпутах
-    Object.keys(countriesData)
-        .sort((a, b) => countriesData[b].area - countriesData[a].area)
-        .forEach((code) => {
-            const option = document.createElement('option');
-            option.value = countriesData[code].name.common;
-            countriesList.appendChild(option);
-        });
+        const countriesData = await API.getCountryAll();
+        printInElement('', output);
 
-    fromCountry.disabled = false;
-    toCountry.disabled = false;
-    submit.disabled = false;
+        // Заполняем список стран для подсказки в инпутах
+        const countriesNameMap = fillDatalist(countriesList, countriesData);
 
-    form.addEventListener('submit', async (event) => {
-        try {
-            event.preventDefault();
-            toggleUIDisable(fromCountry, toCountry, submit);
+        toggleUIDisable(fromCountry, toCountry, submit);
 
-            if (fromCountry.value === '' || toCountry.value === '') {
-                throw new BaseError(2001, 'Оба поля должны быть заполнены.');
+        form.addEventListener('submit', async (event) => {
+            try {
+                event.preventDefault();
+                toggleUIDisable(fromCountry, toCountry, submit);
+
+                if (fromCountry.value === '' || toCountry.value === '') {
+                    throw new BaseError(2001, 'Оба поля должны быть заполнены.');
+                }
+
+                // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
+                printInElement(getSearchMarkup(fromCountry.value, toCountry.value), output);
+
+                // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
+                const fromCountryCode = countriesNameMap.get(fromCountry.value);
+                const toCountryCode = countriesNameMap.get(toCountry.value);
+
+                if (fromCountryCode == null || toCountryCode == null) {
+                    throw new BaseError(404, `Одна или обе страны не найдены. Пожалуйста проверьте введенные данные.`);
+                }
+
+                const [from, to] = await Promise.all([
+                    API.getCountryByCode(fromCountryCode),
+                    API.getCountryByCode(toCountryCode),
+                ]).then((result) => result.flat());
+                const routs = await API.findLandRouts(from, to);
+
+                toggleUIDisable(fromCountry, toCountry, submit);
+
+                // TODO: Вывести маршрут и общее количество запросов.
+                printInElement(getRoutsMarkup(routs), output);
+            } catch (err) {
+                toggleUIDisable(fromCountry, toCountry, submit);
+                errorHandler(err, output);
             }
-
-            // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
-            printInElement(getSearchMarkup(fromCountry.value, toCountry.value), output);
-
-            // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
-            const API = new RESTCountriesAPIProvider();
-            const [from, to] = await Promise.all([
-                API.getCountryByName(fromCountry.value),
-                API.getCountryByName(toCountry.value),
-            ]).then((result) => result.flat());
-            const result = await API.findLandRouts(from, to);
-
-            toggleUIDisable(fromCountry, toCountry, submit);
-
-            // TODO: Вывести маршрут и общее количество запросов.
-            printInElement(getRoutsMarkup(result), output);
-        } catch (err) {
-            toggleUIDisable(fromCountry, toCountry, submit);
-            errorHandler(err, output);
-        }
-    });
+        });
+    } catch (err) {
+        toggleUIDisable(fromCountry, toCountry, submit);
+        errorHandler(err, output);
+    }
 })();
