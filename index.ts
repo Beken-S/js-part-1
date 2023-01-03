@@ -1,89 +1,335 @@
 class BaseError extends Error {
-    constructor(status, message) {
+    constructor(public status: number, public message: string) {
         super(message);
         this.status = status;
     }
 }
 
-// Вспомогательный класс для проверок данных от API
-class Country {
-    static VALID_FIELDS = [
-        'name',
-        'tld',
-        'cca2',
-        'ccn3',
-        'cca3',
-        'cioc',
-        'independent',
-        'status',
-        'unMember',
-        'currencies',
-        'idd',
-        'capital',
-        'altSpellings',
-        'region',
-        'subregion',
-        'languages',
-        'translations',
-        'latlng',
-        'landlocked',
-        'borders',
-        'area',
-        'demonyms',
-        'flag',
-        'maps',
-        'population',
-        'gini',
-        'fifa',
-        'car',
-        'timezones',
-        'continents',
-        'flags',
-        'coatOfArms',
-        'startOfWeek',
-        'capitalInfo',
-        'postalCode',
-    ];
+const CCA3_CODES = [
+    'VCT',
+    'GUF',
+    'FRO',
+    'PAK',
+    'FJI',
+    'MNG',
+    'CCK',
+    'FSM',
+    'NOR',
+    'MRT',
+    'ESP',
+    'TUR',
+    'ARE',
+    'COD',
+    'NCL',
+    'RWA',
+    'AUS',
+    'IMN',
+    'IDN',
+    'ZMB',
+    'JEY',
+    'URY',
+    'CAN',
+    'PER',
+    'MSR',
+    'ATG',
+    'DMA',
+    'KHM',
+    'FLK',
+    'GUM',
+    'PNG',
+    'SYC',
+    'LBR',
+    'CPV',
+    'GRD',
+    'CUB',
+    'DJI',
+    'LBN',
+    'MMR',
+    'CYM',
+    'GAB',
+    'PYF',
+    'ZAF',
+    'SUR',
+    'CRI',
+    'CAF',
+    'TCA',
+    'LIE',
+    'NIU',
+    'UMI',
+    'PRK',
+    'UKR',
+    'GNB',
+    'ATA',
+    'MYT',
+    'TUV',
+    'MAR',
+    'MDA',
+    'OMN',
+    'ITA',
+    'YEM',
+    'KWT',
+    'PRI',
+    'PSE',
+    'COL',
+    'MKD',
+    'QAT',
+    'TWN',
+    'MDG',
+    'BHS',
+    'CUW',
+    'SLB',
+    'SHN',
+    'HND',
+    'ARM',
+    'GTM',
+    'TGO',
+    'SEN',
+    'CZE',
+    'UNK',
+    'MHL',
+    'MUS',
+    'GEO',
+    'PHL',
+    'ALB',
+    'JAM',
+    'SRB',
+    'CHL',
+    'GUY',
+    'TZA',
+    'BGD',
+    'ECU',
+    'CYP',
+    'DOM',
+    'SGS',
+    'ALA',
+    'FIN',
+    'KOR',
+    'BFA',
+    'NFK',
+    'PRT',
+    'BRB',
+    'JOR',
+    'NGA',
+    'BHR',
+    'KIR',
+    'STP',
+    'CHN',
+    'CHE',
+    'KEN',
+    'MDV',
+    'SLV',
+    'KNA',
+    'BRN',
+    'BEN',
+    'GIN',
+    'MAC',
+    'USA',
+    'ERI',
+    'SWE',
+    'ATF',
+    'GHA',
+    'DNK',
+    'BGR',
+    'BWA',
+    'IRN',
+    'BVT',
+    'BOL',
+    'PCN',
+    'BLR',
+    'BMU',
+    'KAZ',
+    'LAO',
+    'UZB',
+    'MYS',
+    'VGB',
+    'SPM',
+    'ISL',
+    'GRC',
+    'PRY',
+    'CMR',
+    'PLW',
+    'BRA',
+    'BLM',
+    'AIA',
+    'ETH',
+    'DEU',
+    'HUN',
+    'SDN',
+    'SOM',
+    'LTU',
+    'AGO',
+    'GNQ',
+    'SAU',
+    'EST',
+    'LUX',
+    'ZWE',
+    'NZL',
+    'VEN',
+    'GMB',
+    'WLF',
+    'BEL',
+    'BLZ',
+    'ESH',
+    'SVN',
+    'SYR',
+    'JPN',
+    'RUS',
+    'LSO',
+    'IRL',
+    'MNE',
+    'AND',
+    'NLD',
+    'LVA',
+    'TUN',
+    'ABW',
+    'HRV',
+    'MLI',
+    'AFG',
+    'SLE',
+    'IRQ',
+    'COM',
+    'EGY',
+    'VNM',
+    'VAT',
+    'SXM',
+    'SVK',
+    'SGP',
+    'COK',
+    'SWZ',
+    'TON',
+    'COG',
+    'GGY',
+    'GLP',
+    'NAM',
+    'TTO',
+    'BTN',
+    'HKG',
+    'SSD',
+    'SMR',
+    'TJK',
+    'UGA',
+    'WSM',
+    'DZA',
+    'CIV',
+    'VIR',
+    'AZE',
+    'LKA',
+    'CXR',
+    'TCD',
+    'ARG',
+    'IND',
+    'MAF',
+    'HTI',
+    'LCA',
+    'NPL',
+    'TKL',
+    'TKM',
+    'ISR',
+    'BES',
+    'MLT',
+    'MNP',
+    'MWI',
+    'GIB',
+    'VUT',
+    'GBR',
+    'MTQ',
+    'MEX',
+    'BIH',
+    'ROU',
+    'SJM',
+    'HMD',
+    'IOT',
+    'REU',
+    'KGZ',
+    'THA',
+    'BDI',
+    'GRL',
+    'AUT',
+    'FRA',
+    'MCO',
+    'NRU',
+    'NER',
+    'ASM',
+    'MOZ',
+    'TLS',
+    'NIC',
+    'PAN',
+    'POL',
+    'LBY',
+] as const;
+type Cca3Code = typeof CCA3_CODES[number];
+function isCca3Code(code: unknown): code is Cca3Code {
+    return CCA3_CODES.includes(code as Cca3Code);
+}
 
-    // Возвращает true если страна имеет в поле borders непустой массив
-    static hasBorders(country) {
-        if (!Country.isCountry(country)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        return country?.borders && country.borders.length !== 0;
-    }
+type Translation = {
+    official: string;
+    common: string;
+};
+function isTranslation(obj: unknown): obj is Translation {
+    return (
+        typeof obj === 'object' &&
+        obj != null &&
+        typeof Reflect.get(obj, 'official') === 'string' &&
+        typeof Reflect.get(obj, 'common') === 'string'
+    );
+}
 
-    // Проверяет имеет ли страна в поле borders код страны в формате cca3
-    static hasBorder(country, border) {
-        if (!Country.isCountry(country)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (typeof border !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        return country.borders.includes(border);
-    }
+const TRANSLATIONS = ['rus'] as const;
+type Translations = {
+    [K in typeof TRANSLATIONS[number]]: Translation;
+};
+function isTranslations(obj: unknown): obj is Translations {
+    return typeof obj === 'object' && obj != null && TRANSLATIONS.every((key) => isTranslation(Reflect.get(obj, key)));
+}
 
-    static isValidCountryField(field) {
-        if (typeof field !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        return this.VALID_FIELDS.includes(field);
-    }
+type LatLong = [number, number];
+function isLatLong(arr: unknown): arr is LatLong {
+    return Array.isArray(arr) && arr.length === 2 && arr.every((value) => typeof value === 'number');
+}
 
-    static isCountry(country) {
-        if (!country?.cca3 || !country?.latlng || !country?.name) {
-            return false;
-        }
-        return Object.keys(country).every((field) => Country.isValidCountryField(field));
-    }
+type Borders = Cca3Code[];
+function isBorders(arr: unknown): arr is Cca3Code[] {
+    return Array.isArray(arr) && (arr.length == 0 || arr.every((value) => isCca3Code(value)));
+}
+
+type Country = {
+    name: string;
+    cca3: Cca3Code;
+    borders: Borders;
+    translations: Translations;
+    latlng: LatLong;
+};
+function isCountry(obj: unknown): obj is Country {
+    return (
+        typeof obj === 'object' &&
+        obj != null &&
+        typeof Reflect.get(obj, 'name') === 'string' &&
+        isCca3Code(Reflect.get(obj, 'cca3')) &&
+        isBorders(Reflect.get(obj, 'borders')) &&
+        isTranslations(Reflect.get(obj, 'translations')) &&
+        isLatLong(Reflect.get(obj, 'latlng'))
+    );
+}
+function isCountryArray(arr: unknown): arr is Country[] {
+    return Array.isArray(arr) && arr.every((value) => !isCountry(value));
+}
+
+function hasBorders(country: Country): boolean {
+    return country.borders.length !== 0;
+}
+
+// Проверяет имеет ли страна в поле borders код страны в формате cca3
+function hasBorder(country: Country, border: Cca3Code): boolean {
+    return country.borders.includes(border);
 }
 
 // Вспомогательный класс для оформления ответа от функции поиска маршрута
 class ResponseFindLandRouts {
-    isFound = false;
-    visited = new Map();
-    routs = [];
+    public isFound: boolean = false;
+    public visited: Map<Cca3Code, boolean> = new Map();
+    public routs: string[][] = [];
+    public requestsCount: number;
 
     constructor(requestsCount = 0) {
         this.requestsCount = requestsCount;
@@ -91,17 +337,18 @@ class ResponseFindLandRouts {
 }
 
 class RESTCountriesAPIProvider {
-    URL = 'https://restcountries.com/v3.1';
-    requestsCount = 0;
-    cash = new Map();
-    fullTextQueryParam = 'fullText=true';
+    private readonly URL = 'https://restcountries.com/v3.1';
+    private readonly cash: Map<Cca3Code, Country> = new Map();
+    private readonly fullTextQueryParam: string = 'fullText=true';
+    private readonly fieldsQueryParams: string;
+    private requestsCount = 0;
 
-    constructor(...fields) {
+    constructor(...fields: string[]) {
         this.fieldsQueryParams = RESTCountriesAPIProvider.getFieldsQueryParams(fields);
     }
 
     // Для формирования query строки с полями ответа
-    static getFieldsQueryParams(fields) {
+    private static getFieldsQueryParams(fields: string[]): string {
         const set = new Set(fields);
         set.add('cca3');
         set.add('name');
@@ -112,17 +359,18 @@ class RESTCountriesAPIProvider {
     }
 
     // Для формирования query строки с полями ответа
-    static getFieldQueryParam(field) {
-        if (!Country.isValidCountryField(field)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
+    private static getFieldQueryParam(field: string): string {
         return `fields=${field}`;
     }
 
-    async getCountryAll() {
+    public async getCountryAll(): Promise<Country[]> {
         this.requestsCount += 1;
         const { URL, fieldsQueryParams } = this;
         const result = await getData(`${URL}/all${getQueryString(fieldsQueryParams)}`);
+
+        if (!isCountryArray(result)) {
+            throw new BaseError(1001, 'Неверный ответ от севера');
+        }
 
         result
             .sort((a, b) => {
@@ -145,14 +393,10 @@ class RESTCountriesAPIProvider {
     }
 
     // Получения страны от API по коду cca3
-    async getCountryByCode(code) {
-        if (typeof code !== 'string' || code === '') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-
+    public async getCountryByCode(code: Cca3Code): Promise<Country> {
         // Проверяем есть ли в кеше страна
         if (this.cash.has(code)) {
-            return this.cash.get(code);
+            return this.cash.get(code) as Country;
         }
 
         this.requestsCount += 1; // увеличиваем счетчик запросов
@@ -160,9 +404,19 @@ class RESTCountriesAPIProvider {
         const result = await getData(`${URL}/alpha/${code}${getQueryString(fieldsQueryParams)}`);
 
         // Если в ответе придет массив стран добавляем все станы в кеш и возвращаем искомую
-        if (Array.isArray(result)) {
+        if (isCountryArray(result)) {
             result.forEach((country) => this.cash.set(country.cca3, country));
-            return result.find((country) => country.cca3 === code);
+            const desiredCountry = result.find((country) => country.cca3 === code);
+
+            if (desiredCountry == null) {
+                throw new BaseError(1001, 'Неверный ответ от севера');
+            }
+
+            return desiredCountry;
+        }
+
+        if (!isCountry(result)) {
+            throw new BaseError(1001, 'Неверный ответ от севера');
         }
 
         this.cash.set(result.cca3, result); // добавляем страну в кеш
@@ -170,44 +424,26 @@ class RESTCountriesAPIProvider {
     }
 
     // Получения стран от API по массиву кодов cca3
-    async getCountriesByCodes(codes) {
-        if (!Array.isArray(codes)) {
-            throw new Error('Недопустимые значения аргументов.');
-        }
-
+    public async getCountriesByCodes(codes: Cca3Code[]): Promise<Country[]> {
         return Promise.all(codes.map(this.getCountryByCode.bind(this)));
     }
 
     // Функция расчета сухопутного маршрута
-    async findLandRouts(
-        from,
-        to,
+    public async findLandRouts(
+        from: Country,
+        to: Country,
         depth = 10,
         result = new ResponseFindLandRouts(this.requestsCount),
-        currentRout = []
-    ) {
-        // Проверка аргументов
-        if (typeof depth !== 'number' || Number.isNaN(depth)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!(result instanceof ResponseFindLandRouts)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!Array.isArray(currentRout)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!Country.isCountry(from) || !Country.isCountry(to)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-
+        currentRout: string[] = []
+    ): Promise<ResponseFindLandRouts> {
         // Проверка наличия сухопутных границ у заданных стран
-        if (!Country.hasBorders(from)) {
+        if (!hasBorders(from)) {
             throw new BaseError(
                 2000,
                 'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
             );
         }
-        if (!Country.hasBorders(to)) {
+        if (!hasBorders(to)) {
             throw new BaseError(
                 2000,
                 'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
@@ -221,14 +457,14 @@ class RESTCountriesAPIProvider {
 
         // Если узел уже посещен вернуть reject
         if (result.visited.get(from.cca3)) {
-            return Promise.reject('Узел уже посещен.');
+            return result;
         }
 
         // Отметить узел как посещенный
         result.visited.set(from.cca3, true);
 
         // Если узел граничит с местом назначения вернуть результат поиска
-        if (Country.hasBorder(from, to.cca3)) {
+        if (hasBorder(from, to.cca3)) {
             result.isFound = true;
             result.routs.push([...currentRout, from.translations.rus.common, to.translations.rus.common]);
             return result;
@@ -241,12 +477,13 @@ class RESTCountriesAPIProvider {
 
         // Отфильтровать посещенные узлы
         const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
+
+        if (filteredBorders.length === 0) {
+            return result;
+        }
+
         const countries = await this.getCountriesByCodes(filteredBorders);
         result.requestsCount = this.requestsCount;
-
-        if (countries.length === 0) {
-            return Promise.reject('Нет стран для продолжения поиска.');
-        }
 
         // Отсортировать полученные от API страны по степени удаления от места назначения
         const sortedCountries = countries
@@ -256,19 +493,21 @@ class RESTCountriesAPIProvider {
             }))
             .sort((a, b) => a.dist - b.dist);
 
-        // Если маршрут не найден рекурсивно вызвать функцию для отсортированного массива стран
-        return Promise.any(
+        // Рекурсивно вызвать функцию для отсортированного массива стран
+        return Promise.all(
             sortedCountries.map((sortedCountry) =>
                 this.findLandRouts(sortedCountry.country, to, depth - 1, result, [
                     ...currentRout,
                     from.translations.rus.common,
                 ])
             )
-        );
+        )
+            .then((result) => result.flat())
+            .then((flatResult) => flatResult[0]);
     }
 }
 
-async function getData(url) {
+async function getData(url: string): Promise<unknown> {
     // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
     const response = await fetch(url, {
         method: 'GET',
@@ -293,26 +532,13 @@ async function getData(url) {
 }
 
 // Функция для создания query строки
-function getQueryString(...params) {
+function getQueryString(...params: string[]): string {
     return `?${params.join('&')}`;
 }
 
 // Функция для расчета кратчайшего расстояния между точками по географическим координатам
 // https://gis-lab.info/qa/great-circles.html
-function calcGreatCircleDistance(lat1, long1, lat2, long2) {
-    if (typeof lat1 !== 'number' || !Number.isFinite(lat1) || lat1 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof long1 !== 'number' || !Number.isFinite(long1) || long1 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof lat2 !== 'number' || !Number.isFinite(lat2) || lat2 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof long2 !== 'number' || !Number.isFinite(long2) || long2 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
+function calcGreatCircleDistance(lat1: number, long1: number, lat2: number, long2: number): number {
     // Средний радиус Земли (WGS 84)
     const EARTH_RADIUS = 6371009;
 
@@ -339,11 +565,7 @@ function calcGreatCircleDistance(lat1, long1, lat2, long2) {
     return Math.round(ad * EARTH_RADIUS);
 }
 
-function getRequestString(num) {
-    if (typeof num !== 'number' || !Number.isFinite(num)) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
+function getRequestString(num: number): string {
     let key = num;
 
     if (key > 100) {
@@ -365,7 +587,7 @@ function getRequestString(num) {
     }
 }
 
-function getRoutsMarkup({ isFound, requestsCount, routs }) {
+function getRoutsMarkup({ isFound, requestsCount, routs }: ResponseFindLandRouts): string {
     if (isFound == null || requestsCount == null || routs == null) {
         return '';
     }
@@ -381,51 +603,40 @@ function getRoutsMarkup({ isFound, requestsCount, routs }) {
     return `Не удалось рассчитать маршрут.<br /><br />${getRequestString(requestsCount)}`;
 }
 
-function getLoadingMarkup() {
+function getLoadingMarkup(): string {
     return 'Идет загрузка...';
 }
 
-function getSearchMarkup(from, to) {
-    if (typeof from !== 'string' || typeof to !== 'string') {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
+function getSearchMarkup(from: string, to: string) {
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
 }
 
-function fillDatalist(datalist, countriesData) {
-    if (datalist instanceof HTMLElement) {
-        const optionsList = document.createDocumentFragment();
-        const countriesNameMap = new Map();
+function fillDatalist(datalist: HTMLDataListElement, countriesData: Country[]): Map<string, Cca3Code> {
+    const optionsList: DocumentFragment = document.createDocumentFragment();
+    const countriesNameMap: Map<string, Cca3Code> = new Map();
 
-        countriesData.forEach((country) => {
-            const option = document.createElement('option');
-            option.value = country?.translations.rus.common;
-            optionsList.appendChild(option);
-            countriesNameMap.set(country?.translations.rus.common, country?.cca3);
-        });
+    countriesData.forEach((country) => {
+        const option: HTMLOptionElement = document.createElement('option');
+        option.value = country?.translations.rus.common;
+        optionsList.appendChild(option);
+        countriesNameMap.set(country?.translations.rus.common, country?.cca3);
+    });
 
-        datalist.appendChild(optionsList);
+    datalist.appendChild(optionsList);
 
-        return countriesNameMap;
-    }
-    return null;
+    return countriesNameMap;
 }
 
-function printInElement(string, output) {
-    if (output instanceof HTMLElement) {
-        output.innerHTML = string;
-    }
+function printInElement(str: string, output: HTMLElement): void {
+    output.innerHTML = str;
 }
 
-function toggleUIDisable(...elements) {
-    if (elements.every((element) => element instanceof HTMLElement)) {
-        elements.forEach((element) => (element.disabled = !element.disabled));
-    }
+function toggleUIDisable(...elements: Array<HTMLInputElement | HTMLButtonElement>): void {
+    elements.forEach((element) => (element.disabled = !element.disabled));
 }
 
-function errorHandler(err, output) {
-    if (err instanceof BaseError && output instanceof HTMLElement) {
+function errorHandler(err: Error, output: HTMLElement) {
+    if (err instanceof BaseError) {
         switch (err.status) {
             case 400:
             case 404:
@@ -451,6 +662,17 @@ const toCountry = document.getElementById('toCountry');
 const countriesList = document.getElementById('countriesList');
 const submit = document.getElementById('submit');
 const output = document.getElementById('output');
+
+if (
+    !(form instanceof HTMLFormElement) ||
+    !(fromCountry instanceof HTMLInputElement) ||
+    !(toCountry instanceof HTMLInputElement) ||
+    !(countriesList instanceof HTMLDataListElement) ||
+    !(submit instanceof HTMLButtonElement) ||
+    !(output instanceof HTMLDivElement)
+) {
+    throw new Error('Не найден или неверный DOM элемент.');
+}
 
 (async () => {
     try {
@@ -497,13 +719,17 @@ const output = document.getElementById('output');
 
                 // TODO: Вывести маршрут и общее количество запросов.
                 printInElement(getRoutsMarkup(routs), output);
-            } catch (err) {
+            } catch (err: unknown) {
                 toggleUIDisable(fromCountry, toCountry, submit);
-                errorHandler(err, output);
+                if (err instanceof Error) {
+                    errorHandler(err, output);
+                }
             }
         });
-    } catch (err) {
+    } catch (err: unknown) {
         toggleUIDisable(fromCountry, toCountry, submit);
-        errorHandler(err, output);
+        if (err instanceof Error) {
+            errorHandler(err, output);
+        }
     }
 })();
