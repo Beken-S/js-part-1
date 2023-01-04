@@ -1,3 +1,5 @@
+import Maps from '/maps.js';
+
 class BaseError extends Error {
     constructor(status, message) {
         super(message);
@@ -242,6 +244,7 @@ class RESTCountriesAPIProvider {
         // Отфильтровать посещенные узлы
         const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
         const countries = await this.getCountriesByCodes(filteredBorders);
+        Maps.markAsVisited(filteredBorders);
         result.requestsCount = this.requestsCount;
 
         if (countries.length === 0) {
@@ -491,6 +494,8 @@ const output = document.getElementById('output');
                     API.getCountryByCode(fromCountryCode),
                     API.getCountryByCode(toCountryCode),
                 ]).then((result) => result.flat());
+
+                Maps.setEndPoints(from.cca3, to.cca3);
                 const routs = await API.findLandRouts(from, to);
 
                 toggleUIDisable(fromCountry, toCountry, submit);
