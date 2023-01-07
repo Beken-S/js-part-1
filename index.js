@@ -56,8 +56,22 @@ class RESTCountriesAPIProvider {
 
         // Если в ответе придет массив стран добавляем все станы в кеш и возвращаем искомую
         if (Array.isArray(result)) {
-            result.forEach((country) => this.cache.set(country.cca3, country));
-            return result.find((country) => country.cca3 === code);
+            if (!isCountryArray(result)) {
+                throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
+            }
+
+            let desiredCountry;
+            result.forEach((country) => {
+                this.cache.set(country.cca3, country);
+                if (country.cca3 === code) {
+                    desiredCountry = country;
+                }
+            });
+            return desiredCountry;
+        }
+
+        if (!isCountry(result)) {
+            throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
         }
 
         this.cache.set(result.cca3, result); // добавляем страну в кеш
