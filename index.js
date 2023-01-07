@@ -1,71 +1,10 @@
 import Maps from '/maps.js';
+import { isCountry, isCountryArray, hasBorder, hasBorders } from '/country.js';
 
 class BaseError extends Error {
     constructor(status, message) {
         super(message);
         this.status = status;
-    }
-}
-
-// Вспомогательный класс для проверок данных от API
-class Country {
-    static VALID_FIELDS = [
-        'name',
-        'tld',
-        'cca2',
-        'ccn3',
-        'cca3',
-        'cioc',
-        'independent',
-        'status',
-        'unMember',
-        'currencies',
-        'idd',
-        'capital',
-        'altSpellings',
-        'region',
-        'subregion',
-        'languages',
-        'translations',
-        'latlng',
-        'landlocked',
-        'borders',
-        'area',
-        'demonyms',
-        'flag',
-        'maps',
-        'population',
-        'gini',
-        'fifa',
-        'car',
-        'timezones',
-        'continents',
-        'flags',
-        'coatOfArms',
-        'startOfWeek',
-        'capitalInfo',
-        'postalCode',
-    ];
-
-    // Возвращает true если страна имеет в поле borders непустой массив
-    static hasBorders(country) {
-        return country?.borders && country.borders.length !== 0;
-    }
-
-    // Проверяет имеет ли страна в поле borders код страны в формате cca3
-    static hasBorder(country, border) {
-        return country.borders.includes(border);
-    }
-
-    static isValidCountryField(field) {
-        return this.VALID_FIELDS.includes(field);
-    }
-
-    static isCountry(country) {
-        if (!country?.cca3 || !country?.latlng || !country?.name) {
-            return false;
-        }
-        return Object.keys(country).every((field) => Country.isValidCountryField(field));
     }
 }
 
@@ -134,13 +73,13 @@ class RESTCountriesAPIProvider {
         currentRout = []
     ) {
         // Проверка наличия сухопутных границ у заданных стран
-        if (!Country.hasBorders(from)) {
+        if (!hasBorders(from)) {
             throw new BaseError(
                 2000,
                 'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
             );
         }
-        if (!Country.hasBorders(to)) {
+        if (!hasBorders(to)) {
             throw new BaseError(
                 2000,
                 'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
@@ -161,7 +100,7 @@ class RESTCountriesAPIProvider {
         result.visited.set(from.cca3, true);
 
         // Если узел граничит с местом назначения вернуть результат поиска
-        if (Country.hasBorder(from, to.cca3)) {
+        if (hasBorder(from, to.cca3)) {
             result.isFound = true;
             result.routs.push([...currentRout, from.name.common, to.name.common]);
             return result;
