@@ -33,7 +33,7 @@ class RESTCountriesAPIProvider {
         ['fields', 'latlng'],
     ]);
     requestsCount = 0;
-    cash = new Map();
+    cache = new Map();
 
     constructor(...fields) {
         if (fields != null) {
@@ -45,8 +45,8 @@ class RESTCountriesAPIProvider {
     // Получения страны от API по коду cca3
     async getCountryByCode(code) {
         // Проверяем есть ли в кеше страна
-        if (this.cash.has(code)) {
-            return this.cash.get(code);
+        if (this.cache.has(code)) {
+            return this.cache.get(code);
         }
 
         this.requestsCount += 1; // увеличиваем счетчик запросов
@@ -56,11 +56,11 @@ class RESTCountriesAPIProvider {
 
         // Если в ответе придет массив стран добавляем все станы в кеш и возвращаем искомую
         if (Array.isArray(result)) {
-            result.forEach((country) => this.cash.set(country.cca3, country));
+            result.forEach((country) => this.cache.set(country.cca3, country));
             return result.find((country) => country.cca3 === code);
         }
 
-        this.cash.set(result.cca3, result); // добавляем страну в кеш
+        this.cache.set(result.cca3, result); // добавляем страну в кеш
         return result;
     }
 
