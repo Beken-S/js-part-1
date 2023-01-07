@@ -9,6 +9,14 @@ class BaseError extends Error {
     }
 }
 
+const ERROR_CODE = {
+    BadRequest: 400,
+    NotFound: 404,
+    InvalidResponse: 1000,
+    CountryHasNoBorders: 2000,
+    EmptyFieldsInTheForm: 2001,
+    UnexpectedError: 5000,
+};
 // Вспомогательный класс для оформления ответа от функции поиска маршрута
 class ResponseFindLandRouts {
     isFound = false;
@@ -76,13 +84,13 @@ class RESTCountriesAPIProvider {
         // Проверка наличия сухопутных границ у заданных стран
         if (!hasBorders(from)) {
             throw new BaseError(
-                2000,
+                ERROR_CODE.CountryHasNoBorders,
                 'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
             );
         }
         if (!hasBorders(to)) {
             throw new BaseError(
-                2000,
+                ERROR_CODE.CountryHasNoBorders,
                 'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
             );
         }
@@ -151,12 +159,12 @@ async function getData(url) {
 
     if (!response.ok) {
         if (response.status === 400) {
-            throw new BaseError(400, 'Некорректный запрос. Пожалуйста проверьте введенные данные.');
+            throw new BaseError(ERROR_CODE.BadRequest, 'Некорректный запрос. Пожалуйста проверьте введенные данные.');
         }
         if (response.status === 404) {
-            throw new BaseError(404, 'Информация не найдена. Пожалуйста проверьте введенные данные.');
+            throw new BaseError(ERROR_CODE.NotFound, 'Информация не найдена. Пожалуйста проверьте введенные данные.');
         } else {
-            throw new BaseError(1000, 'Что-то пошло не так. Попробуйте повторить запрос позже.');
+            throw new BaseError(ERROR_CODE.UnexpectedError, 'Что-то пошло не так. Попробуйте повторить запрос позже.');
         }
     }
 
@@ -225,11 +233,10 @@ function toggleUIDisable(...elements) {
 function errorHandler(err, output) {
     if (err instanceof BaseError) {
         switch (err.status) {
-            case 400:
-            case 404:
-            case 1000:
-            case 2000:
-            case 2001:
+            case ERROR_CODE.BadRequest:
+            case ERROR_CODE.NotFound:
+            case ERROR_CODE.EmptyFieldsInTheForm:
+            case ERROR_CODE.CountryHasNoBorders:
                 printInElement(err.message, output);
                 break;
             default:
@@ -278,7 +285,7 @@ const output = document.getElementById('output');
             toggleUIDisable(fromCountry, toCountry, submit);
 
             if (fromCountry.value === '' || toCountry.value === '') {
-                throw new BaseError(2001, 'Оба поля должны быть заполнены.');
+                throw new BaseError(ERROR_CODE.EmptyFieldsInTheForm, 'Оба поля должны быть заполнены.');
             }
 
             // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
