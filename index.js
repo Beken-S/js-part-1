@@ -84,54 +84,61 @@ class RESTCountriesAPIProvider {
     }
 
     // Функция расчета сухопутного маршрута
-    async findLandRouts(from, to, depth = 10, result, currentRout = []) {
-        // Проверка наличия сухопутных границ у заданных стран
-        if (!hasBorders(from)) {
-            throw new BaseError(
-                ERROR_CODE.CountryHasNoBorders,
-                'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
-            );
-        }
-        if (!hasBorders(to)) {
-            throw new BaseError(
-                ERROR_CODE.CountryHasNoBorders,
-                'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
-            );
+    async findLandRoute(from, to, result, initialDepth = 10, currentDepth = initialDepth, currentRoute = []) {
+        // При первом вызове
+        if (currentDepth === initialDepth) {
+            // Отметить как посещенный первый узел
+            result.visited.set(from.cca3, true);
+
+            // Проверка наличия сухопутных границ у заданных стран
+            if (!hasBorders(from)) {
+                throw new BaseError(
+                    ERROR_CODE.CountryHasNoBorders,
+                    'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
+                );
+            }
+            if (!hasBorders(to)) {
+                throw new BaseError(
+                    ERROR_CODE.CountryHasNoBorders,
+                    'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
+                );
+            }
         }
 
         // Проверка глубины поиска
-        if (depth < 0) {
+        if (currentDepth < 0) {
             return result;
         }
-
-        // Если узел уже посещен вернуть reject
-        if (result.visited.get(from.cca3)) {
-            return Promise.reject('Узел уже посещен.');
-        }
-
-        // Отметить узел как посещенный
-        result.visited.set(from.cca3, true);
 
         // Если узел граничит с местом назначения вернуть результат поиска
         if (hasBorder(from, to.cca3)) {
             result.isFound = true;
-            result.routes.push([...currentRout, from.name.common, to.name.common]);
+            result.routes.push([...currentRoute, from.name.common, to.name.common]);
             return result;
         }
 
-        // Если маршрут уже найден в другом промисе прекратить поиск
+        // Если маршрут найден в другом промисе прекратить поиск
         if (result.isFound) {
             return result;
         }
 
-        // Отфильтровать посещенные узлы
-        const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
+        // Отфильтровать посещенные узлы и отметить не посещенные, чтобы в других промисах к ним не было запроса
+        const filteredBorders = from.borders.filter((cca3) => {
+            if (result.visited.get(cca3)) {
+                return false;
+            }
+
+            result.visited.set(cca3, true);
+            return true;
+        });
+
+        // Прекратить поиск если нет не посещенных стран
+        if (filteredBorders.length === 0) {
+            return result;
+        }
+
         const countries = await this.getCountriesByCodes(filteredBorders);
         Maps.markAsVisited(filteredBorders);
-
-        if (countries.length === 0) {
-            return Promise.reject('Нет стран для продолжения поиска.');
-        }
 
         // Отсортировать полученные от API страны по степени удаления от места назначения
         const sortedCountries = countries
@@ -141,12 +148,18 @@ class RESTCountriesAPIProvider {
             }))
             .sort((a, b) => a.dist - b.dist);
 
-        // Если маршрут не найден рекурсивно вызвать функцию для отсортированного массива стран
-        return Promise.any(
-            sortedCountries.map((sortedCountry) =>
-                this.findLandRouts(sortedCountry.country, to, depth - 1, result, [...currentRout, from.name.common])
+        // Рекурсивно вызвать функцию для отсортированного массива стран
+        // Изменил на all чтобы программа выводила как можно больше найденных маршрутов
+        return Promise.all(
+            sortedCountries.map(({ country }) =>
+                this.findLandRoute(country, to, result, initialDepth, currentDepth - 1, [
+                    ...currentRoute,
+                    from.name.common,
+                ])
             )
-        );
+        )
+            .then((result) => result.flat())
+            .then((result) => result[0]);
     }
 }
 
