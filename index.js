@@ -268,63 +268,75 @@ const submit = document.getElementById('submit');
 const output = document.getElementById('output');
 
 (async () => {
-    fromCountry.disabled = true;
-    toCountry.disabled = true;
-    submit.disabled = true;
+    try {
+        fromCountry.disabled = true;
+        toCountry.disabled = true;
+        submit.disabled = true;
 
-    output.textContent = 'Loading…';
-    const countriesData = await loadCountriesData();
-    output.textContent = '';
+        output.textContent = 'Loading…';
+        const countriesData = await loadCountriesData();
+        output.textContent = '';
 
-    // Заполняем список стран для подсказки в инпутах
-    Object.keys(countriesData)
-        .sort((a, b) => countriesData[b].area - countriesData[a].area)
-        .forEach((code) => {
-            const option = document.createElement('option');
-            option.value = countriesData[code].name.common;
-            countriesList.appendChild(option);
-        });
+        // Заполняем список стран для подсказки в инпутах
+        Object.keys(countriesData)
+            .sort((a, b) => countriesData[b].area - countriesData[a].area)
+            .forEach((code) => {
+                const option = document.createElement('option');
+                option.value = countriesData[code].name.common;
+                countriesList.appendChild(option);
+            });
 
-    fromCountry.disabled = false;
-    toCountry.disabled = false;
-    submit.disabled = false;
+        fromCountry.disabled = false;
+        toCountry.disabled = false;
+        submit.disabled = false;
 
-    form.addEventListener('submit', async (event) => {
-        try {
-            event.preventDefault();
-            toggleUIDisable(fromCountry, toCountry, submit);
+        form.addEventListener('submit', async (event) => {
+            try {
+                event.preventDefault();
+                toggleUIDisable(fromCountry, toCountry, submit);
 
-            if (fromCountry.value === '' || toCountry.value === '') {
-                throw new BaseError(ERROR_CODE.EmptyFieldsInTheForm, 'Оба поля должны быть заполнены.');
+                if (fromCountry.value === '' || toCountry.value === '') {
+                    throw new BaseError(ERROR_CODE.EmptyFieldsInTheForm, 'Оба поля должны быть заполнены.');
+                }
+
+                // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
+                output.innerHTML = getSearchMarkup(fromCountry.value, toCountry.value);
+
+                // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
+                const API = new RESTCountriesAPIProvider();
+                const cca3Codes = Object.keys(countriesData).reduce((codes, code) => {
+                    if (countriesData[code].name.common === fromCountry.value) {
+                        codes[0] = code;
+                    }
+                    if (countriesData[code].name.common === toCountry.value) {
+                        codes[1] = code;
+                    }
+                    return codes;
+                }, []);
+
+                if (cca3Codes.length < 2) {
+                    throw new BaseError(
+                        ERROR_CODE.NotFound,
+                        'Одна из стран не найдена. Пожалуйста проверьте введенные данные.'
+                    );
+                }
+
+                const [from, to] = await API.getCountriesByCodes(cca3Codes);
+                Maps.setEndPoints(from.cca3, to.cca3);
+                const result = new RouteSearchResult();
+                await API.findLandRoute(from, to, result);
+
+                toggleUIDisable(fromCountry, toCountry, submit);
+
+                // TODO: Вывести маршрут и общее количество запросов.
+                output.innerHTML = getRoutesMarkup(API.requestsCount, result);
+            } catch (err) {
+                toggleUIDisable(fromCountry, toCountry, submit);
+                errorHandler(err, output);
             }
-
-            // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
-            output.innerHTML = getSearchMarkup(fromCountry.value, toCountry.value);
-
-            // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
-            const API = new RESTCountriesAPIProvider();
-            const cca3Codes = Object.keys(countriesData).reduce((codes, code) => {
-                if (countriesData[code].name.common === fromCountry.value) {
-                    codes[0] = code;
-                }
-                if (countriesData[code].name.common === toCountry.value) {
-                    codes[1] = code;
-                }
-                return codes;
-            }, []);
-
-            const [from, to] = await API.getCountriesByCodes(cca3Codes);
-            Maps.setEndPoints(from.cca3, to.cca3);
-            const result = new RouteSearchResult();
-            await API.findLandRoute(from, to, result);
-
-            toggleUIDisable(fromCountry, toCountry, submit);
-
-            // TODO: Вывести маршрут и общее количество запросов.
-            output.innerHTML = getRoutesMarkup(API.requestsCount, result);
-        } catch (err) {
-            toggleUIDisable(fromCountry, toCountry, submit);
-            errorHandler(err, output);
-        }
-    });
+        });
+    } catch (err) {
+        toggleUIDisable(fromCountry, toCountry, submit);
+        errorHandler(err, output);
+    }
 })();
