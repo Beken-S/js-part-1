@@ -282,6 +282,23 @@ function isLatLong(arr) {
     );
 }
 
+function isTranslation(value) {
+    return (
+        typeof value === 'object' &&
+        value != null &&
+        'official' in value &&
+        'common' in value &&
+        typeof value.official === 'string' &&
+        typeof value.common === 'string'
+    );
+}
+
+const TRANSLATIONS = ['rus'];
+
+function isTranslations(value) {
+    return typeof value === 'object' && value != null && TRANSLATIONS.every((key) => isTranslation(value[key]));
+}
+
 function isCountry(value) {
     return (
         typeof value === 'object' &&
@@ -290,10 +307,12 @@ function isCountry(value) {
         'cca3' in value &&
         'borders' in value &&
         'latlng' in value &&
+        'translations' in value &&
         isName(value.name) &&
         isCca3Code(value.cca3) &&
         isBorders(value.borders) &&
-        isLatLong(value.latlng)
+        isLatLong(value.latlng) &&
+        isTranslations(value.translations)
     );
 }
 
