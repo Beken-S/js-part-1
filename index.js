@@ -18,14 +18,10 @@ const ERROR_CODE = {
     UnexpectedError: 5000,
 };
 // Вспомогательный класс для оформления ответа от функции поиска маршрута
-class ResponseFindLandRouts {
+class RouteSearchResult {
     isFound = false;
     visited = new Map();
-    routs = [];
-
-    constructor(requestsCount = 0) {
-        this.requestsCount = requestsCount;
-    }
+    routes = [];
 }
 
 class RESTCountriesAPIProvider {
@@ -74,13 +70,7 @@ class RESTCountriesAPIProvider {
     }
 
     // Функция расчета сухопутного маршрута
-    async findLandRouts(
-        from,
-        to,
-        depth = 10,
-        result = new ResponseFindLandRouts(this.requestsCount),
-        currentRout = []
-    ) {
+    async findLandRouts(from, to, depth = 10, result, currentRout = []) {
         // Проверка наличия сухопутных границ у заданных стран
         if (!hasBorders(from)) {
             throw new BaseError(
@@ -111,7 +101,7 @@ class RESTCountriesAPIProvider {
         // Если узел граничит с местом назначения вернуть результат поиска
         if (hasBorder(from, to.cca3)) {
             result.isFound = true;
-            result.routs.push([...currentRout, from.name.common, to.name.common]);
+            result.routes.push([...currentRout, from.name.common, to.name.common]);
             return result;
         }
 
@@ -124,7 +114,6 @@ class RESTCountriesAPIProvider {
         const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
         const countries = await this.getCountriesByCodes(filteredBorders);
         Maps.markAsVisited(filteredBorders);
-        result.requestsCount = this.requestsCount;
 
         if (countries.length === 0) {
             return Promise.reject('Нет стран для продолжения поиска.');
@@ -200,13 +189,13 @@ function getRequestString(num) {
     }
 }
 
-function getRoutsMarkup({ isFound, requestsCount, routs }) {
-    if (isFound == null || requestsCount == null || routs == null) {
+function getRoutesMarkup(requestsCount, { isFound, routes }) {
+    if (isFound == null || requestsCount == null || routes == null) {
         return '';
     }
     if (isFound) {
-        return `${routs.reduce((str, rout) => {
-            str += `${rout.join(' &#129046; ')}<br />`;
+        return `${routes.reduce((str, route) => {
+            str += `${route.join(' &#129046; ')}<br />`;
             return str;
         }, '')}
         <br />
@@ -305,12 +294,13 @@ const output = document.getElementById('output');
 
             const [from, to] = await API.getCountriesByCodes(cca3Codes);
             Maps.setEndPoints(from.cca3, to.cca3);
-            const result = await API.findLandRouts(from, to);
+            const result = new RouteSearchResult();
+            await API.findLandRoute(from, to, result);
 
             toggleUIDisable(fromCountry, toCountry, submit);
 
             // TODO: Вывести маршрут и общее количество запросов.
-            printInElement(getRoutsMarkup(result), output);
+            printInElement(getRoutesMarkup(result), output);
         } catch (err) {
             toggleUIDisable(fromCountry, toCountry, submit);
             errorHandler(err, output);
