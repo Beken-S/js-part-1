@@ -1,4 +1,6 @@
 import Maps from '/maps.js';
+import { isCountry, isCountryArray, hasBorder, hasBorders } from '/country.js';
+import { calcGreatCircleDistance } from '/calcGreatCircleDistance.js';
 
 class BaseError extends Error {
     constructor(status, message) {
@@ -7,124 +9,49 @@ class BaseError extends Error {
     }
 }
 
-// Вспомогательный класс для проверок данных от API
-class Country {
-    static VALID_FIELDS = [
-        'name',
-        'tld',
-        'cca2',
-        'ccn3',
-        'cca3',
-        'cioc',
-        'independent',
-        'status',
-        'unMember',
-        'currencies',
-        'idd',
-        'capital',
-        'altSpellings',
-        'region',
-        'subregion',
-        'languages',
-        'translations',
-        'latlng',
-        'landlocked',
-        'borders',
-        'area',
-        'demonyms',
-        'flag',
-        'maps',
-        'population',
-        'gini',
-        'fifa',
-        'car',
-        'timezones',
-        'continents',
-        'flags',
-        'coatOfArms',
-        'startOfWeek',
-        'capitalInfo',
-        'postalCode',
-    ];
-
-    // Возвращает true если страна имеет в поле borders непустой массив
-    static hasBorders(country) {
-        if (!Country.isCountry(country)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        return country?.borders && country.borders.length !== 0;
-    }
-
-    // Проверяет имеет ли страна в поле borders код страны в формате cca3
-    static hasBorder(country, border) {
-        if (!Country.isCountry(country)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (typeof border !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        return country.borders.includes(border);
-    }
-
-    static isValidCountryField(field) {
-        if (typeof field !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        return this.VALID_FIELDS.includes(field);
-    }
-
-    static isCountry(country) {
-        if (!country?.cca3 || !country?.latlng || !country?.name) {
-            return false;
-        }
-        return Object.keys(country).every((field) => Country.isValidCountryField(field));
-    }
-}
-
+const ERROR_CODE = {
+    BadRequest: 400,
+    NotFound: 404,
+    InvalidResponse: 1000,
+    CountryHasNoBorders: 2000,
+    EmptyFieldsInTheForm: 2001,
+    UnexpectedError: 5000,
+};
 // Вспомогательный класс для оформления ответа от функции поиска маршрута
-class ResponseFindLandRouts {
+class RouteSearchResult {
     isFound = false;
     visited = new Map();
-    routs = [];
-
-    constructor(requestsCount = 0) {
-        this.requestsCount = requestsCount;
-    }
+    routes = [];
 }
 
 class RESTCountriesAPIProvider {
-    URL = 'https://restcountries.com/v3.1';
+    static BASE_URL = 'https://restcountries.com';
+    byCodeParams = new URLSearchParams([
+        ['fields', 'cca3'],
+        ['fields', 'name'],
+        ['fields', 'borders'],
+        ['fields', 'latlng'],
+        ['fields', 'translations'],
+    ]);
     requestsCount = 0;
-    cash = new Map();
-    fullTextQueryParam = 'fullText=true';
+    cache = new Map();
 
     constructor(...fields) {
-        this.fieldsQueryParams = RESTCountriesAPIProvider.getFieldsQueryParams(fields);
-    }
-
-    // Для формирования query строки с полями ответа
-    static getFieldsQueryParams(fields) {
-        const set = new Set(fields);
-        set.add('cca3');
-        set.add('name');
-        set.add('borders');
-        set.add('latlng');
-        set.add('translations');
-        return [...set].map(RESTCountriesAPIProvider.getFieldQueryParam).join('&');
-    }
-
-    // Для формирования query строки с полями ответа
-    static getFieldQueryParam(field) {
-        if (!Country.isValidCountryField(field)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        if (fields != null) {
+            fields.forEach((field) => this.byCodeParams.append('fields', field));
         }
-        return `fields=${field}`;
+        this.byNameParams = new URLSearchParams(this.byCodeParams.toString()).append('fullText', 'true');
     }
 
     async getCountryAll() {
         this.requestsCount += 1;
-        const { URL, fieldsQueryParams } = this;
-        const result = await getData(`${URL}/all${getQueryString(fieldsQueryParams)}`);
+        const getCountryAllURL = new URL(`v3.1/all`, RESTCountriesAPIProvider.BASE_URL);
+        getCountryAllURL.search = this.byCodeParams.toString();
+        const result = await getData(getCountryAllURL.toString());
+
+        if (!isCountryArray(result)) {
+            throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
+        }
 
         result
             .sort((a, b) => {
@@ -140,7 +67,7 @@ class RESTCountriesAPIProvider {
                 return 0;
             })
             .forEach((country) => {
-                this.cash.set(country.cca3, country);
+                this.cache.set(country.cca3, country);
             });
 
         return result;
@@ -148,108 +75,101 @@ class RESTCountriesAPIProvider {
 
     // Получения страны от API по коду cca3
     async getCountryByCode(code) {
-        if (typeof code !== 'string' || code === '') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-
         // Проверяем есть ли в кеше страна
-        if (this.cash.has(code)) {
-            return this.cash.get(code);
+        if (this.cache.has(code)) {
+            return this.cache.get(code);
         }
 
         this.requestsCount += 1; // увеличиваем счетчик запросов
-        const { URL, fieldsQueryParams } = this;
-        const result = await getData(`${URL}/alpha/${code}${getQueryString(fieldsQueryParams)}`);
+        const getCountryByCodeURL = new URL(`v3.1/alpha/${code}`, RESTCountriesAPIProvider.BASE_URL);
+        getCountryByCodeURL.search = this.byCodeParams.toString();
+        const result = await getData(getCountryByCodeURL.toString());
 
         // Если в ответе придет массив стран добавляем все станы в кеш и возвращаем искомую
         if (Array.isArray(result)) {
-            result.forEach((country) => this.cash.set(country.cca3, country));
-            return result.find((country) => country.cca3 === code);
+            if (!isCountryArray(result)) {
+                throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
+            }
+
+            let desiredCountry;
+            result.forEach((country) => {
+                this.cache.set(country.cca3, country);
+                if (country.cca3 === code) {
+                    desiredCountry = country;
+                }
+            });
+            return desiredCountry;
         }
 
-        this.cash.set(result.cca3, result); // добавляем страну в кеш
+        if (!isCountry(result)) {
+            throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
+        }
+
+        this.cache.set(result.cca3, result); // добавляем страну в кеш
         return result;
     }
 
     // Получения стран от API по массиву кодов cca3
     async getCountriesByCodes(codes) {
-        if (!Array.isArray(codes)) {
-            throw new Error('Недопустимые значения аргументов.');
-        }
-
         return Promise.all(codes.map(this.getCountryByCode.bind(this)));
     }
 
     // Функция расчета сухопутного маршрута
-    async findLandRouts(
-        from,
-        to,
-        depth = 10,
-        result = new ResponseFindLandRouts(this.requestsCount),
-        currentRout = []
-    ) {
-        // Проверка аргументов
-        if (typeof depth !== 'number' || Number.isNaN(depth)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!(result instanceof ResponseFindLandRouts)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!Array.isArray(currentRout)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!Country.isCountry(from) || !Country.isCountry(to)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
+    async findLandRoute(from, to, result, initialDepth = 10, currentDepth = initialDepth, currentRoute = []) {
+        // При первом вызове
+        if (currentDepth === initialDepth) {
+            // Отметить как посещенный первый узел
+            result.visited.set(from.cca3, true);
 
-        // Проверка наличия сухопутных границ у заданных стран
-        if (!Country.hasBorders(from)) {
-            throw new BaseError(
-                2000,
-                'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
-            );
-        }
-        if (!Country.hasBorders(to)) {
-            throw new BaseError(
-                2000,
-                'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
-            );
+            // Проверка наличия сухопутных границ у заданных стран
+            if (!hasBorders(from)) {
+                throw new BaseError(
+                    ERROR_CODE.CountryHasNoBorders,
+                    'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
+                );
+            }
+            if (!hasBorders(to)) {
+                throw new BaseError(
+                    ERROR_CODE.CountryHasNoBorders,
+                    'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
+                );
+            }
         }
 
         // Проверка глубины поиска
-        if (depth < 0) {
+        if (currentDepth < 0) {
             return result;
         }
-
-        // Если узел уже посещен вернуть reject
-        if (result.visited.get(from.cca3)) {
-            return Promise.reject('Узел уже посещен.');
-        }
-
-        // Отметить узел как посещенный
-        result.visited.set(from.cca3, true);
 
         // Если узел граничит с местом назначения вернуть результат поиска
-        if (Country.hasBorder(from, to.cca3)) {
+        if (hasBorder(from, to.cca3)) {
             result.isFound = true;
-            result.routs.push([...currentRout, from.translations.rus.common, to.translations.rus.common]);
+            result.routes.push([...currentRoute, from.translations.rus.common, to.translations.rus.common]);
             return result;
         }
 
-        // Если маршрут уже найден в другом промисе прекратить поиск
+        // Если маршрут найден в другом промисе прекратить поиск
         if (result.isFound) {
             return result;
         }
 
-        // Отфильтровать посещенные узлы
-        const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
+        // Отфильтровать посещенные узлы и отметить не посещенные, чтобы в других промисах к ним не было запроса
+        const filteredBorders = from.borders.filter((cca3) => {
+            if (result.visited.get(cca3)) {
+                return false;
+            }
+
+            result.visited.set(cca3, true);
+            return true;
+        });
+
+        // Прекратить поиск если нет не посещенных стран
+        if (filteredBorders.length === 0) {
+            return result;
+        }
+
         const countries = await this.getCountriesByCodes(filteredBorders);
         Maps.markAsVisited(filteredBorders);
-        result.requestsCount = this.requestsCount;
-
-        if (countries.length === 0) {
-            return Promise.reject('Нет стран для продолжения поиска.');
-        }
 
         // Отсортировать полученные от API страны по степени удаления от места назначения
         const sortedCountries = countries
@@ -259,15 +179,18 @@ class RESTCountriesAPIProvider {
             }))
             .sort((a, b) => a.dist - b.dist);
 
-        // Если маршрут не найден рекурсивно вызвать функцию для отсортированного массива стран
-        return Promise.any(
-            sortedCountries.map((sortedCountry) =>
-                this.findLandRouts(sortedCountry.country, to, depth - 1, result, [
-                    ...currentRout,
+        // Рекурсивно вызвать функцию для отсортированного массива стран
+        // Изменил на all чтобы программа выводила как можно больше найденных маршрутов
+        return Promise.all(
+            sortedCountries.map(({ country }) =>
+                this.findLandRoute(country, to, result, initialDepth, currentDepth - 1, [
+                    ...currentRoute,
                     from.translations.rus.common,
                 ])
             )
-        );
+        )
+            .then((result) => result.flat())
+            .then((result) => result[0]);
     }
 }
 
@@ -283,70 +206,19 @@ async function getData(url) {
 
     if (!response.ok) {
         if (response.status === 400) {
-            throw new BaseError(400, 'Некорректный запрос. Пожалуйста проверьте введенные данные.');
+            throw new BaseError(ERROR_CODE.BadRequest, 'Некорректный запрос. Пожалуйста проверьте введенные данные.');
         }
         if (response.status === 404) {
-            throw new BaseError(404, 'Информация не найдена. Пожалуйста проверьте введенные данные.');
+            throw new BaseError(ERROR_CODE.NotFound, 'Информация не найдена. Пожалуйста проверьте введенные данные.');
         } else {
-            throw new BaseError(1000, 'Что-то пошло не так. Попробуйте повторить запрос позже.');
+            throw new BaseError(ERROR_CODE.UnexpectedError, 'Что-то пошло не так. Попробуйте повторить запрос позже.');
         }
     }
 
     return response.json();
 }
 
-// Функция для создания query строки
-function getQueryString(...params) {
-    return `?${params.join('&')}`;
-}
-
-// Функция для расчета кратчайшего расстояния между точками по географическим координатам
-// https://gis-lab.info/qa/great-circles.html
-function calcGreatCircleDistance(lat1, long1, lat2, long2) {
-    if (typeof lat1 !== 'number' || !Number.isFinite(lat1) || lat1 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof long1 !== 'number' || !Number.isFinite(long1) || long1 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof lat2 !== 'number' || !Number.isFinite(lat2) || lat2 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof long2 !== 'number' || !Number.isFinite(long2) || long2 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
-    // Средний радиус Земли (WGS 84)
-    const EARTH_RADIUS = 6371009;
-
-    // Получение координат точек в радианах
-    const lat1Rad = (lat1 * Math.PI) / 180;
-    const lat2Rad = (lat2 * Math.PI) / 180;
-    const long1Rad = (long1 * Math.PI) / 180;
-    const long2Rad = (long2 * Math.PI) / 180;
-
-    // Косинусы и синусы широт и разниц долгот
-    const cl1 = Math.cos(lat1Rad);
-    const cl2 = Math.cos(lat2Rad);
-    const sl1 = Math.sin(lat1Rad);
-    const sl2 = Math.sin(lat2Rad);
-    const delta = long2Rad - long1Rad;
-    const cDelta = Math.cos(delta);
-    const sDelta = Math.sin(delta);
-
-    // Вычисление углового расстояния
-    const y = Math.sqrt(Math.pow(cl2 * sDelta, 2) + Math.pow(cl1 * sl2 - sl1 * cl2 * cDelta, 2));
-    const x = sl1 * sl2 + cl1 * cl2 * cDelta;
-    const ad = Math.atan2(y, x);
-
-    return Math.round(ad * EARTH_RADIUS);
-}
-
 function getRequestString(num) {
-    if (typeof num !== 'number' || !Number.isFinite(num)) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
     let key = num;
 
     if (key > 100) {
@@ -368,13 +240,13 @@ function getRequestString(num) {
     }
 }
 
-function getRoutsMarkup({ isFound, requestsCount, routs }) {
-    if (isFound == null || requestsCount == null || routs == null) {
+function getRoutesMarkup(requestsCount, { isFound, routes }) {
+    if (isFound == null || requestsCount == null || routes == null) {
         return '';
     }
     if (isFound) {
-        return `${routs.reduce((str, rout) => {
-            str += `${rout.join(' &#129046; ')}<br />`;
+        return `${routes.reduce((str, route) => {
+            str += `${route.join(' &#129046; ')}<br />`;
             return str;
         }, '')}
         <br />
@@ -389,61 +261,45 @@ function getLoadingMarkup() {
 }
 
 function getSearchMarkup(from, to) {
-    if (typeof from !== 'string' || typeof to !== 'string') {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
 }
 
 function fillDatalist(datalist, countriesData) {
-    if (datalist instanceof HTMLElement) {
-        const optionsList = document.createDocumentFragment();
-        const countriesNameMap = new Map();
+    const optionsList = document.createDocumentFragment();
+    const countriesNameMap = new Map();
 
-        countriesData.forEach((country) => {
-            const option = document.createElement('option');
-            option.value = country?.translations.rus.common;
-            optionsList.appendChild(option);
-            countriesNameMap.set(country?.translations.rus.common, country?.cca3);
-        });
+    countriesData.forEach((country) => {
+        const option = document.createElement('option');
+        option.value = country?.translations.rus.common;
+        optionsList.appendChild(option);
+        countriesNameMap.set(country?.translations.rus.common, country?.cca3);
+    });
 
-        datalist.appendChild(optionsList);
+    datalist.appendChild(optionsList);
 
-        return countriesNameMap;
-    }
-    return null;
-}
-
-function printInElement(string, output) {
-    if (output instanceof HTMLElement) {
-        output.innerHTML = string;
-    }
+    return countriesNameMap;
 }
 
 function toggleUIDisable(...elements) {
-    if (elements.every((element) => element instanceof HTMLElement)) {
-        elements.forEach((element) => (element.disabled = !element.disabled));
-    }
+    elements.forEach((element) => (element.disabled = !element.disabled));
 }
 
 function errorHandler(err, output) {
-    if (err instanceof BaseError && output instanceof HTMLElement) {
+    if (err instanceof BaseError) {
         switch (err.status) {
-            case 400:
-            case 404:
-            case 1000:
-            case 2000:
-            case 2001:
-                printInElement(err.message, output);
+            case ERROR_CODE.BadRequest:
+            case ERROR_CODE.NotFound:
+            case ERROR_CODE.EmptyFieldsInTheForm:
+            case ERROR_CODE.CountryHasNoBorders:
+                output.textContent = err.message;
                 break;
             default:
-                printInElement('Что-то пошло не так. Попробуйте повторит запрос позже', output);
+                output.textContent = 'Что-то пошло не так. Попробуйте повторит запрос позже';
                 console.error(err);
                 break;
         }
     } else {
-        printInElement('Что-то пошло не так. Попробуйте повторить запрос позже.', output);
+        output.textContent = 'Что-то пошло не так. Попробуйте повторит запрос позже';
         console.error(err);
     }
 }
@@ -458,12 +314,10 @@ const output = document.getElementById('output');
 (async () => {
     try {
         toggleUIDisable(fromCountry, toCountry, submit);
-        printInElement(getLoadingMarkup(), output);
-
+        output.textContent = getLoadingMarkup();
         const API = new RESTCountriesAPIProvider();
-
         const countriesData = await API.getCountryAll();
-        printInElement('', output);
+        output.textContent = '';
 
         // Заполняем список стран для подсказки в инпутах
         const countriesNameMap = fillDatalist(countriesList, countriesData);
@@ -476,32 +330,32 @@ const output = document.getElementById('output');
                 toggleUIDisable(fromCountry, toCountry, submit);
 
                 if (fromCountry.value === '' || toCountry.value === '') {
-                    throw new BaseError(2001, 'Оба поля должны быть заполнены.');
+                    throw new BaseError(ERROR_CODE.EmptyFieldsInTheForm, 'Оба поля должны быть заполнены.');
                 }
 
                 // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
-                printInElement(getSearchMarkup(fromCountry.value, toCountry.value), output);
+                output.innerHTML = getSearchMarkup(fromCountry.value, toCountry.value);
 
                 // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
                 const fromCountryCode = countriesNameMap.get(fromCountry.value);
                 const toCountryCode = countriesNameMap.get(toCountry.value);
 
                 if (fromCountryCode == null || toCountryCode == null) {
-                    throw new BaseError(404, `Одна или обе страны не найдены. Пожалуйста проверьте введенные данные.`);
+                    throw new BaseError(
+                        ERROR_CODE.NotFound,
+                        'Одна из стран не найдена. Пожалуйста проверьте введенные данные.'
+                    );
                 }
 
-                const [from, to] = await Promise.all([
-                    API.getCountryByCode(fromCountryCode),
-                    API.getCountryByCode(toCountryCode),
-                ]).then((result) => result.flat());
-
+                const [from, to] = await API.getCountriesByCodes([fromCountryCode, toCountryCode]);
                 Maps.setEndPoints(from.cca3, to.cca3);
-                const routs = await API.findLandRouts(from, to);
+                const result = new RouteSearchResult();
+                await API.findLandRoute(from, to, result);
 
                 toggleUIDisable(fromCountry, toCountry, submit);
 
                 // TODO: Вывести маршрут и общее количество запросов.
-                printInElement(getRoutsMarkup(routs), output);
+                output.innerHTML = getRoutesMarkup(API.requestsCount, result);
             } catch (err) {
                 toggleUIDisable(fromCountry, toCountry, submit);
                 errorHandler(err, output);
