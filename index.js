@@ -81,31 +81,21 @@ class ResponseFindLandRouts {
 }
 
 class RESTCountriesAPIProvider {
-    URL = 'https://restcountries.com/v3.1';
+    static BASE_URL = 'https://restcountries.com';
+    byCodeParams = new URLSearchParams([
+        ['fields', 'cca3'],
+        ['fields', 'name'],
+        ['fields', 'borders'],
+        ['fields', 'latlng'],
+    ]);
     requestsCount = 0;
     cash = new Map();
-    fullTextQueryParam = 'fullText=true';
 
     constructor(...fields) {
-        this.fieldsQueryParams = RESTCountriesAPIProvider.getFieldsQueryParams(fields);
-    }
-
-    // Для формирования query строки с полями ответа
-    static getFieldsQueryParams(fields) {
-        const set = new Set(fields);
-        set.add('cca3');
-        set.add('name');
-        set.add('borders');
-        set.add('latlng');
-        return [...fields].map(RESTCountriesAPIProvider.getFieldQueryParam).join('&');
-    }
-
-    // Для формирования query строки с полями ответа
-    static getFieldQueryParam(field) {
-        if (!Country.isValidCountryField(field)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
+        if (fields != null) {
+            fields.forEach((field) => this.byCodeParams.append('fields', field));
         }
-        return `fields=${field}`;
+        this.byNameParams = new URLSearchParams(this.byCodeParams.toString()).append('fullText', 'true');
     }
 
     // Получения страны от API по коду cca3
@@ -116,8 +106,9 @@ class RESTCountriesAPIProvider {
         }
 
         this.requestsCount += 1; // увеличиваем счетчик запросов
-        const { URL, fieldsQueryParams } = this;
-        const result = await getData(`${URL}/alpha/${code}${getQueryString(fieldsQueryParams)}`);
+        const getCountryByCodeURL = new URL(`v3.1/alpha/${code}`, RESTCountriesAPIProvider.BASE_URL);
+        getCountryByCodeURL.search = this.byCodeParams.toString();
+        const result = await getData(getCountryByCodeURL.toString());
 
         // Если в ответе придет массив стран добавляем все станы в кеш и возвращаем искомую
         if (Array.isArray(result)) {
@@ -132,15 +123,6 @@ class RESTCountriesAPIProvider {
     // Получения стран от API по массиву кодов cca3
     async getCountriesByCodes(codes) {
         return Promise.all(codes.map(this.getCountryByCode.bind(this)));
-    }
-
-    // Получение страны от API по имени
-    async getCountryByName(name) {
-        this.requestsCount += 1;
-        const { URL, fieldsQueryParams, fullTextQueryParam } = this;
-        const country = await getData(`${URL}/name/${name}${getQueryString(fieldsQueryParams, fullTextQueryParam)}`);
-        this.cash.set(country.cca3, country);
-        return country;
     }
 
     // Функция расчета сухопутного маршрута
@@ -247,11 +229,6 @@ async function loadCountriesData() {
         result[country.cca3] = country;
         return result;
     }, {});
-}
-
-// Функция для создания query строки
-function getQueryString(...params) {
-    return `?${params.join('&')}`;
 }
 
 // Функция для расчета кратчайшего расстояния между точками по географическим координатам
@@ -399,11 +376,17 @@ const output = document.getElementById('output');
 
             // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
             const API = new RESTCountriesAPIProvider();
-            const [from, to] = await Promise.all([
-                API.getCountryByName(fromCountry.value),
-                API.getCountryByName(toCountry.value),
-            ]).then((result) => result.flat());
+            const cca3Codes = Object.keys(countriesData).reduce((codes, code) => {
+                if (countriesData[code].name.common === fromCountry.value) {
+                    codes[0] = code;
+                }
+                if (countriesData[code].name.common === toCountry.value) {
+                    codes[1] = code;
+                }
+                return codes;
+            }, []);
 
+            const [from, to] = await API.getCountriesByCodes(cca3Codes);
             Maps.setEndPoints(from.cca3, to.cca3);
             const result = await API.findLandRouts(from, to);
 
