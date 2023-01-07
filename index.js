@@ -49,27 +49,15 @@ class Country {
 
     // Возвращает true если страна имеет в поле borders непустой массив
     static hasBorders(country) {
-        if (!Country.isCountry(country)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
         return country?.borders && country.borders.length !== 0;
     }
 
     // Проверяет имеет ли страна в поле borders код страны в формате cca3
     static hasBorder(country, border) {
-        if (!Country.isCountry(country)) {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (typeof border !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
         return country.borders.includes(border);
     }
 
     static isValidCountryField(field) {
-        if (typeof field !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
         return this.VALID_FIELDS.includes(field);
     }
 
@@ -122,10 +110,6 @@ class RESTCountriesAPIProvider {
 
     // Получения страны от API по коду cca3
     async getCountryByCode(code) {
-        if (typeof code !== 'string') {
-            return new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-
         // Проверяем есть ли в кеше страна
         if (this.cash.has(code)) {
             return this.cash.get(code);
@@ -147,10 +131,6 @@ class RESTCountriesAPIProvider {
 
     // Получения стран от API по массиву кодов cca3
     async getCountriesByCodes(codes) {
-        if (!Array.isArray(codes)) {
-            throw new Error('Недопустимые значения аргументов.');
-        }
-
         return Promise.all(codes.map(this.getCountryByCode.bind(this)));
     }
 
@@ -171,20 +151,6 @@ class RESTCountriesAPIProvider {
         result = new ResponseFindLandRouts(this.requestsCount),
         currentRout = []
     ) {
-        // Проверка аргументов
-        if (typeof depth !== 'number' || Number.isNaN(depth)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!(result instanceof ResponseFindLandRouts)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!Array.isArray(currentRout)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-        if (!Country.isCountry(from) || !Country.isCountry(to)) {
-            throw new BaseError(1001, 'Недопустимые значения аргументов.');
-        }
-
         // Проверка наличия сухопутных границ у заданных стран
         if (!Country.hasBorders(from)) {
             throw new BaseError(
@@ -291,19 +257,6 @@ function getQueryString(...params) {
 // Функция для расчета кратчайшего расстояния между точками по географическим координатам
 // https://gis-lab.info/qa/great-circles.html
 function calcGreatCircleDistance(lat1, long1, lat2, long2) {
-    if (typeof lat1 !== 'number' || !Number.isFinite(lat1) || lat1 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof long1 !== 'number' || !Number.isFinite(long1) || long1 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof lat2 !== 'number' || !Number.isFinite(lat2) || lat2 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-    if (typeof long2 !== 'number' || !Number.isFinite(long2) || long2 > 360) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
     // Средний радиус Земли (WGS 84)
     const EARTH_RADIUS = 6371009;
 
@@ -331,10 +284,6 @@ function calcGreatCircleDistance(lat1, long1, lat2, long2) {
 }
 
 function getRequestString(num) {
-    if (typeof num !== 'number' || !Number.isFinite(num)) {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
     let key = num;
 
     if (key > 100) {
@@ -373,10 +322,6 @@ function getRoutsMarkup({ isFound, requestsCount, routs }) {
 }
 
 function getSearchMarkup(from, to) {
-    if (typeof from !== 'string' || typeof to !== 'string') {
-        throw new BaseError(1001, 'Недопустимые значения аргументов.');
-    }
-
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
 }
 
@@ -387,13 +332,11 @@ function printInElement(string, output) {
 }
 
 function toggleUIDisable(...elements) {
-    if (elements.every((element) => element instanceof HTMLElement)) {
-        elements.forEach((element) => (element.disabled = !element.disabled));
-    }
+    elements.forEach((element) => (element.disabled = !element.disabled));
 }
 
 function errorHandler(err, output) {
-    if (err instanceof BaseError && output instanceof HTMLElement) {
+    if (err instanceof BaseError) {
         switch (err.status) {
             case 400:
             case 404:
