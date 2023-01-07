@@ -209,12 +209,6 @@ function getSearchMarkup(from, to) {
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
 }
 
-function printInElement(string, output) {
-    if (output instanceof HTMLElement) {
-        output.innerHTML = string;
-    }
-}
-
 function toggleUIDisable(...elements) {
     elements.forEach((element) => (element.disabled = !element.disabled));
 }
@@ -226,15 +220,15 @@ function errorHandler(err, output) {
             case ERROR_CODE.NotFound:
             case ERROR_CODE.EmptyFieldsInTheForm:
             case ERROR_CODE.CountryHasNoBorders:
-                printInElement(err.message, output);
+                output.textContent = err.message;
                 break;
             default:
-                printInElement('Что-то пошло не так. Попробуйте повторит запрос позже', output);
+                output.textContent = 'Что-то пошло не так. Попробуйте повторит запрос позже';
                 console.error(err);
                 break;
         }
     } else {
-        printInElement('Что-то пошло не так. Попробуйте повторить запрос позже.', output);
+        output.textContent = 'Что-то пошло не так. Попробуйте повторит запрос позже';
         console.error(err);
     }
 }
@@ -278,7 +272,7 @@ const output = document.getElementById('output');
             }
 
             // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
-            printInElement(getSearchMarkup(fromCountry.value, toCountry.value), output);
+            output.innerHTML = getSearchMarkup(fromCountry.value, toCountry.value);
 
             // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
             const API = new RESTCountriesAPIProvider();
@@ -300,7 +294,7 @@ const output = document.getElementById('output');
             toggleUIDisable(fromCountry, toCountry, submit);
 
             // TODO: Вывести маршрут и общее количество запросов.
-            printInElement(getRoutesMarkup(result), output);
+            output.innerHTML = getRoutesMarkup(API.requestsCount, result);
         } catch (err) {
             toggleUIDisable(fromCountry, toCountry, submit);
             errorHandler(err, output);
