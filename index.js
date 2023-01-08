@@ -13,15 +13,19 @@ const ERROR_CODE = {
     BadRequest: 400,
     NotFound: 404,
     InvalidResponse: 1000,
-    CountryHasNoBorders: 2000,
-    EmptyFieldsInTheForm: 2001,
+    NetworkError: 1001,
     UnexpectedError: 5000,
 };
+
 // Вспомогательный класс для оформления ответа от функции поиска маршрута
 class RouteSearchResult {
     isFound = false;
     visited = new Map();
     routes = [];
+
+    constructor(fromCountryCode) {
+        this.visited.set(fromCountryCode, true);
+    }
 }
 
 class RESTCountriesAPIProvider {
@@ -70,12 +74,12 @@ class RESTCountriesAPIProvider {
             return desiredCountry;
         }
 
-        if (!isCountry(result)) {
-            throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
+        if (isCountry(result)) {
+            this.cache.set(result.cca3, result); // добавляем страну в кеш
+            return result;
         }
 
-        this.cache.set(result.cca3, result); // добавляем страну в кеш
-        return result;
+        throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
     }
 
     // Получения стран от API по массиву кодов cca3
@@ -84,29 +88,9 @@ class RESTCountriesAPIProvider {
     }
 
     // Функция расчета сухопутного маршрута
-    async findLandRoute(from, to, result, initialDepth = 10, currentDepth = initialDepth, currentRoute = []) {
-        // При первом вызове
-        if (currentDepth === initialDepth) {
-            // Отметить как посещенный первый узел
-            result.visited.set(from.cca3, true);
-
-            // Проверка наличия сухопутных границ у заданных стран
-            if (!hasBorders(from)) {
-                throw new BaseError(
-                    ERROR_CODE.CountryHasNoBorders,
-                    'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.'
-                );
-            }
-            if (!hasBorders(to)) {
-                throw new BaseError(
-                    ERROR_CODE.CountryHasNoBorders,
-                    'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.'
-                );
-            }
-        }
-
+    async findLandRoute(from, to, depth = 10, result = new RouteSearchResult(from.cca3), currentRoute = []) {
         // Проверка глубины поиска
-        if (currentDepth < 0) {
+        if (depth < 0) {
             return result;
         }
 
@@ -122,21 +106,16 @@ class RESTCountriesAPIProvider {
             return result;
         }
 
-        // Отфильтровать посещенные узлы и отметить не посещенные, чтобы в других промисах к ним не было запроса
-        const filteredBorders = from.borders.filter((cca3) => {
-            if (result.visited.get(cca3)) {
-                return false;
-            }
-
-            result.visited.set(cca3, true);
-            return true;
-        });
+        // Отфильтровать посещенные узлы
+        const filteredBorders = from.borders.filter((cca3) => !result.visited.get(cca3));
 
         // Прекратить поиск если нет не посещенных стран
         if (filteredBorders.length === 0) {
             return result;
         }
 
+        // Отметить не посещенные узлы, чтобы в других промисах к ним не было запроса
+        filteredBorders.forEach((cca3) => result.visited.set(cca3, true));
         const countries = await this.getCountriesByCodes(filteredBorders);
         Maps.markAsVisited(filteredBorders);
 
@@ -152,10 +131,7 @@ class RESTCountriesAPIProvider {
         // Изменил на all чтобы программа выводила как можно больше найденных маршрутов
         return Promise.all(
             sortedCountries.map(({ country }) =>
-                this.findLandRoute(country, to, result, initialDepth, currentDepth - 1, [
-                    ...currentRoute,
-                    from.name.common,
-                ])
+                this.findLandRoute(country, to, depth - 1, result, [...currentRoute, from.name.common])
             )
         )
             .then((result) => result.flat())
@@ -171,20 +147,18 @@ async function getData(url) {
             'Content-Type': 'application/json',
         },
         redirect: 'follow',
-    });
+    }).catch((err) => Promise.reject(new BaseError(ERROR_CODE.NetworkError, err.message)));
 
-    if (!response.ok) {
-        if (response.status === 400) {
-            throw new BaseError(ERROR_CODE.BadRequest, 'Некорректный запрос. Пожалуйста проверьте введенные данные.');
-        }
-        if (response.status === 404) {
-            throw new BaseError(ERROR_CODE.NotFound, 'Информация не найдена. Пожалуйста проверьте введенные данные.');
-        } else {
-            throw new BaseError(ERROR_CODE.UnexpectedError, 'Что-то пошло не так. Попробуйте повторить запрос позже.');
-        }
+    if (response.ok) {
+        return response.json();
     }
-
-    return response.json();
+    if (response.status === 400) {
+        throw new BaseError(ERROR_CODE.BadRequest, 'Некорректный запрос.');
+    }
+    if (response.status === 404) {
+        throw new BaseError(ERROR_CODE.NotFound, 'Информация не найдена.');
+    }
+    throw new BaseError(ERROR_CODE.UnexpectedError, 'Что-то пошло не так.');
 }
 
 async function loadCountriesData() {
@@ -242,21 +216,10 @@ function toggleUIDisable(...elements) {
 
 function errorHandler(err, output) {
     if (err instanceof BaseError) {
-        switch (err.status) {
-            case ERROR_CODE.BadRequest:
-            case ERROR_CODE.NotFound:
-            case ERROR_CODE.EmptyFieldsInTheForm:
-            case ERROR_CODE.CountryHasNoBorders:
-                output.textContent = err.message;
-                break;
-            default:
-                output.textContent = 'Что-то пошло не так. Попробуйте повторит запрос позже';
-                console.error(err);
-                break;
-        }
-    } else {
         output.textContent = 'Что-то пошло не так. Попробуйте повторит запрос позже';
         console.error(err);
+    } else {
+        throw err;
     }
 }
 
@@ -268,75 +231,102 @@ const submit = document.getElementById('submit');
 const output = document.getElementById('output');
 
 (async () => {
-    try {
-        fromCountry.disabled = true;
-        toCountry.disabled = true;
-        submit.disabled = true;
+    fromCountry.disabled = true;
+    toCountry.disabled = true;
+    submit.disabled = true;
 
-        output.textContent = 'Loading…';
-        const countriesData = await loadCountriesData();
-        output.textContent = '';
-
-        // Заполняем список стран для подсказки в инпутах
-        Object.keys(countriesData)
-            .sort((a, b) => countriesData[b].area - countriesData[a].area)
-            .forEach((code) => {
-                const option = document.createElement('option');
-                option.value = countriesData[code].name.common;
-                countriesList.appendChild(option);
-            });
-
-        fromCountry.disabled = false;
-        toCountry.disabled = false;
-        submit.disabled = false;
-
-        form.addEventListener('submit', async (event) => {
-            try {
-                event.preventDefault();
-                toggleUIDisable(fromCountry, toCountry, submit);
-
-                if (fromCountry.value === '' || toCountry.value === '') {
-                    throw new BaseError(ERROR_CODE.EmptyFieldsInTheForm, 'Оба поля должны быть заполнены.');
-                }
-
-                // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
-                output.innerHTML = getSearchMarkup(fromCountry.value, toCountry.value);
-
-                // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
-                const API = new RESTCountriesAPIProvider();
-                const cca3Codes = Object.keys(countriesData).reduce((codes, code) => {
-                    if (countriesData[code].name.common === fromCountry.value) {
-                        codes[0] = code;
-                    }
-                    if (countriesData[code].name.common === toCountry.value) {
-                        codes[1] = code;
-                    }
-                    return codes;
-                }, []);
-
-                if (cca3Codes.length < 2) {
-                    throw new BaseError(
-                        ERROR_CODE.NotFound,
-                        'Одна из стран не найдена. Пожалуйста проверьте введенные данные.'
-                    );
-                }
-
-                const [from, to] = await API.getCountriesByCodes(cca3Codes);
-                Maps.setEndPoints(from.cca3, to.cca3);
-                const result = new RouteSearchResult();
-                await API.findLandRoute(from, to, result);
-
-                toggleUIDisable(fromCountry, toCountry, submit);
-
-                // TODO: Вывести маршрут и общее количество запросов.
-                output.innerHTML = getRoutesMarkup(API.requestsCount, result);
-            } catch (err) {
-                toggleUIDisable(fromCountry, toCountry, submit);
-                errorHandler(err, output);
-            }
-        });
-    } catch (err) {
+    output.textContent = 'Loading…';
+    const countriesData = await loadCountriesData().catch((err) => {
         toggleUIDisable(fromCountry, toCountry, submit);
         errorHandler(err, output);
+    });
+
+    if (!countriesData) {
+        return;
     }
+
+    output.textContent = '';
+
+    // Заполняем список стран для подсказки в инпутах
+    Object.keys(countriesData)
+        .sort((a, b) => countriesData[b].area - countriesData[a].area)
+        .forEach((code) => {
+            const option = document.createElement('option');
+            option.value = countriesData[code].name.common;
+            countriesList.appendChild(option);
+        });
+
+    fromCountry.disabled = false;
+    toCountry.disabled = false;
+    submit.disabled = false;
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        toggleUIDisable(fromCountry, toCountry, submit);
+
+        if (fromCountry.value === '' || toCountry.value === '') {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            output.textContent = 'Оба поля должны быть заполнены.';
+            return;
+        }
+
+        // TODO: Вывести, откуда и куда едем, и что идёт расчёт.
+        output.innerHTML = getSearchMarkup(fromCountry.value, toCountry.value);
+
+        // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
+        const API = new RESTCountriesAPIProvider();
+        const cca3Codes = Object.keys(countriesData).reduce((codes, code) => {
+            if (countriesData[code].name.common === fromCountry.value) {
+                codes[0] = code;
+            }
+            if (countriesData[code].name.common === toCountry.value) {
+                codes[1] = code;
+            }
+            return codes;
+        }, []);
+
+        if (cca3Codes.length < 2) {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            output.textContent = 'Одна из стран не найдена. Пожалуйста проверьте введенные данные.';
+            return;
+        }
+
+        const countries = await API.getCountriesByCodes(cca3Codes).catch((err) => {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            errorHandler(err, output);
+        });
+
+        if (!countries) {
+            return;
+        }
+
+        const [from, to] = countries;
+
+        // Проверка наличия сухопутных границ у заданных стран
+        if (!hasBorders(from)) {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            output.textContent = 'Страна отправления не имеет сухопутных границ. Попробуйте выбрать другую страну.';
+            return;
+        }
+        if (!hasBorders(to)) {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            output.textContent = 'Страна назначения не имеет сухопутных границ. Попробуйте выбрать другую страну.';
+            return;
+        }
+
+        Maps.setEndPoints(from.cca3, to.cca3);
+        const result = await API.findLandRoute(from, to).catch((err) => {
+            toggleUIDisable(fromCountry, toCountry, submit);
+            errorHandler(err, output);
+        });
+
+        if (!result) {
+            return;
+        }
+
+        toggleUIDisable(fromCountry, toCountry, submit);
+
+        // TODO: Вывести маршрут и общее количество запросов.
+        output.innerHTML = getRoutesMarkup(API.requestsCount, result);
+    });
 })();
