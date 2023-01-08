@@ -35,6 +35,7 @@ class RESTCountriesAPIProvider {
         ['fields', 'name'],
         ['fields', 'borders'],
         ['fields', 'latlng'],
+        ['fields', 'translations'],
     ]);
     requestsCount = 0;
     cache = new Map();
@@ -44,6 +45,36 @@ class RESTCountriesAPIProvider {
             fields.forEach((field) => this.byCodeParams.append('fields', field));
         }
         this.byNameParams = new URLSearchParams(this.byCodeParams.toString()).append('fullText', 'true');
+    }
+
+    async getCountryAll() {
+        this.requestsCount += 1;
+        const getCountryAllURL = new URL(`v3.1/all`, RESTCountriesAPIProvider.BASE_URL);
+        getCountryAllURL.search = this.byCodeParams.toString();
+        const result = await getData(getCountryAllURL.toString());
+
+        if (!isCountryArray(result)) {
+            throw new BaseError(ERROR_CODE.InvalidResponse, 'Неверный ответ от сервера.');
+        }
+
+        result
+            .sort((a, b) => {
+                const nameA = a.translations.rus.common;
+                const nameB = b.translations.rus.common;
+
+                if (nameA < nameB) {
+                    return -1;
+                }
+                if (nameA > nameB) {
+                    return 1;
+                }
+                return 0;
+            })
+            .forEach((country) => {
+                this.cache.set(country.cca3, country);
+            });
+
+        return result;
     }
 
     // Получения страны от API по коду cca3
@@ -97,7 +128,7 @@ class RESTCountriesAPIProvider {
         // Если узел граничит с местом назначения вернуть результат поиска
         if (hasBorder(from, to.cca3)) {
             result.isFound = true;
-            result.routes.push([...currentRoute, from.name.common, to.name.common]);
+            result.routes.push([...currentRoute, from.translations.rus.common, to.translations.rus.common]);
             return result;
         }
 
@@ -131,7 +162,7 @@ class RESTCountriesAPIProvider {
         // Изменил на all чтобы программа выводила как можно больше найденных маршрутов
         return Promise.all(
             sortedCountries.map(({ country }) =>
-                this.findLandRoute(country, to, depth - 1, result, [...currentRoute, from.name.common])
+                this.findLandRoute(country, to, depth - 1, result, [...currentRoute, from.translations.rus.common])
             )
         )
             .then((result) => result.flat())
@@ -161,13 +192,6 @@ async function getData(url) {
     throw new BaseError(ERROR_CODE.UnexpectedError, 'Что-то пошло не так.');
 }
 
-async function loadCountriesData() {
-    const countries = await getData('https://restcountries.com/v3.1/all?fields=name&fields=cca3&fields=area');
-    return countries.reduce((result, country) => {
-        result[country.cca3] = country;
-        return result;
-    }, {});
-}
 function getRequestString(num) {
     let key = num;
 
@@ -206,8 +230,28 @@ function getRoutesMarkup(requestsCount, { isFound, routes }) {
     return `Не удалось рассчитать маршрут.<br /><br />${getRequestString(requestsCount)}`;
 }
 
+function getLoadingMarkup() {
+    return 'Идет загрузка...';
+}
+
 function getSearchMarkup(from, to) {
     return `${from} &#129046; ${to} <br /><br /> Идет поиск... `;
+}
+
+function fillDatalist(datalist, countriesData) {
+    const optionsList = document.createDocumentFragment();
+    const countriesNameMap = new Map();
+
+    countriesData.forEach((country) => {
+        const option = document.createElement('option');
+        option.value = country?.translations.rus.common;
+        optionsList.appendChild(option);
+        countriesNameMap.set(country?.translations.rus.common, country?.cca3);
+    });
+
+    datalist.appendChild(optionsList);
+
+    return countriesNameMap;
 }
 
 function toggleUIDisable(...elements) {
@@ -231,12 +275,10 @@ const submit = document.getElementById('submit');
 const output = document.getElementById('output');
 
 (async () => {
-    fromCountry.disabled = true;
-    toCountry.disabled = true;
-    submit.disabled = true;
-
-    output.textContent = 'Loading…';
-    const countriesData = await loadCountriesData().catch((err) => {
+    toggleUIDisable(fromCountry, toCountry, submit);
+    output.textContent = getLoadingMarkup();
+    const API = new RESTCountriesAPIProvider();
+    const countriesData = await API.getCountryAll().catch((err) => {
         toggleUIDisable(fromCountry, toCountry, submit);
         errorHandler(err, output);
     });
@@ -248,17 +290,9 @@ const output = document.getElementById('output');
     output.textContent = '';
 
     // Заполняем список стран для подсказки в инпутах
-    Object.keys(countriesData)
-        .sort((a, b) => countriesData[b].area - countriesData[a].area)
-        .forEach((code) => {
-            const option = document.createElement('option');
-            option.value = countriesData[code].name.common;
-            countriesList.appendChild(option);
-        });
+    const countriesNameMap = fillDatalist(countriesList, countriesData);
 
-    fromCountry.disabled = false;
-    toCountry.disabled = false;
-    submit.disabled = false;
+    toggleUIDisable(fromCountry, toCountry, submit);
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -275,23 +309,16 @@ const output = document.getElementById('output');
 
         // TODO: Рассчитать маршрут из одной страны в другую за минимум запросов.
         const API = new RESTCountriesAPIProvider();
-        const cca3Codes = Object.keys(countriesData).reduce((codes, code) => {
-            if (countriesData[code].name.common === fromCountry.value) {
-                codes[0] = code;
-            }
-            if (countriesData[code].name.common === toCountry.value) {
-                codes[1] = code;
-            }
-            return codes;
-        }, []);
+        const fromCountryCode = countriesNameMap.get(fromCountry.value);
+        const toCountryCode = countriesNameMap.get(toCountry.value);
 
-        if (cca3Codes.length < 2) {
+        if (fromCountryCode == null || toCountryCode == null) {
             toggleUIDisable(fromCountry, toCountry, submit);
             output.textContent = 'Одна из стран не найдена. Пожалуйста проверьте введенные данные.';
             return;
         }
 
-        const countries = await API.getCountriesByCodes(cca3Codes).catch((err) => {
+        const countries = await API.getCountriesByCodes([fromCountryCode, toCountryCode]).catch((err) => {
             toggleUIDisable(fromCountry, toCountry, submit);
             errorHandler(err, output);
         });
